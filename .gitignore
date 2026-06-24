@@ -1,0 +1,11 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+.env
+
+# texto extraído é gerado em tempo de execução a partir do PDF
+data/*.txt
+
+# resumos gerados pelo pipeline
+output/
