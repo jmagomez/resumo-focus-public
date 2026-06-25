@@ -1,11 +1,9 @@
 __pycache__/
 .pytest_cache/
 *.pyc
-*.pyo
 .env
 
-# texto extraído é gerado em tempo de execução a partir do PDF
+# data/*.txt é gerado em runtime a partir do PDF; não precisa ser versionado
 data/*.txt
 
-# resumos gerados pelo pipeline
-output/
+# output/focus/ é versionado de propósito: guarda os resumos gerados pelo agente
