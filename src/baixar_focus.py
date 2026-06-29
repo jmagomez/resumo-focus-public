@@ -16,15 +16,8 @@ _MAX_LOOKBACK = 7
 
 
 def última_segunda(hoje: date) -> date:
-    """Retorna a segunda-feira mais recente estritamente anterior a `hoje`.
-
-    Se `hoje` já é segunda-feira, retrocede para a segunda da semana passada.
-    """
-    # weekday(): Monday=0 … Sunday=6
-    dias_desde_segunda = hoje.weekday()  # 0 se hoje é segunda
-    if dias_desde_segunda == 0:
-        dias_desde_segunda = 7  # força recuo para a semana anterior
-    return hoje - timedelta(days=dias_desde_segunda)
+    """Retorna a segunda-feira mais recente, incluindo hoje se hoje for segunda."""
+    return hoje - timedelta(days=hoje.weekday())
 
 
 def baixar(dest: Path | str) -> tuple[date, Path]:
