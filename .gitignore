@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .env
 
-# data/*.txt é gerado em runtime a partir do PDF; não precisa ser versionado
-data/*.txt
+# data/focus_*.pdf e data/focus_*.txt são versionados: o Action de download
+# commita ambos e a rotina agendada do agente lê o .txt (routine-prompt.md)
 
 # output/focus/ é versionado de propósito: guarda os resumos gerados pelo agente
