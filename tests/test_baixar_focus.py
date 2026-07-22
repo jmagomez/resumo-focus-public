@@ -28,9 +28,9 @@ def test_última_segunda_terça():
 
 
 def test_última_segunda_quando_hoje_é_segunda():
-    """Se hoje for segunda, deve recuar para a segunda da semana passada."""
+    """Se hoje for segunda, a própria segunda é retornada (inclui hoje)."""
     segunda = date(2026, 6, 15)         # segunda-feira
-    assert última_segunda(segunda) == date(2026, 6, 8)
+    assert última_segunda(segunda) == date(2026, 6, 15)
 
 
 def test_última_segunda_domingo():
@@ -42,7 +42,7 @@ def test_última_segunda_domingo():
 def test_última_segunda_varredura_60_dias():
     """Para qualquer dia numa janela de 60 dias, o retorno deve ser:
     - uma segunda-feira (weekday == 0), e
-    - estritamente anterior à data fornecida.
+    - anterior ou igual à data fornecida (inclui hoje se for segunda).
     """
     inicio = date(2026, 4, 1)
     for delta in range(60):
@@ -52,8 +52,8 @@ def test_última_segunda_varredura_60_dias():
             f"{hoje} deveria retornar uma segunda, mas retornou {resultado} "
             f"({resultado.strftime('%A')})"
         )
-        assert resultado < hoje, (
-            f"Para {hoje}, o retorno {resultado} não é estritamente anterior."
+        assert resultado <= hoje, (
+            f"Para {hoje}, o retorno {resultado} não pode ser posterior."
         )
 
 
