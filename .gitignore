@@ -1,7 +1,21 @@
 __pycache__/
 .pytest_cache/
+.ruff_cache/
 *.pyc
+*.pyo
 .env
+.env.*
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
 
 # data/focus_*.pdf e data/focus_*.txt são versionados: o Action de download
 # commita ambos e a rotina agendada do agente lê o .txt (routine-prompt.md)
