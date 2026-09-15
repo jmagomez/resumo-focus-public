@@ -21,6 +21,7 @@ Decisões de codificação visual (e por que):
 from __future__ import annotations
 
 import html
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -95,14 +96,19 @@ def esc(texto: object) -> str:
     return html.escape(str(texto), quote=True)
 
 
-#: Separadores usados dentro de atributos ``data-*`` para o tooltip.
-#: São caracteres de controle justamente porque nunca aparecem em texto do BCB.
-# Escritos com chr() de propósito. A forma com escape unicode no literal
-# sobrevive mal a ferramentas que reinterpretam escapes no caminho até o
-# repositório: o separador chega vazio, e o tooltip inteiro colapsa numa
-# linha só — sem erro nenhum, que é o pior modo de falha possível.
-SEP_TITULO = chr(0x1F)  # separa o título do corpo do tooltip
-SEP_ITEM = chr(0x1E)  # separa as linhas do corpo
+# O conteúdo do tooltip viaja como **JSON** dentro do atributo ``data-*``.
+#
+# Antes eram separadores in-band (U+001F e U+001E, caracteres de controle
+# escolhidos por nunca aparecerem em texto do BCB). A ideia era boa e o modo
+# de falha, péssimo: caractere de controle não sobrevive a qualquer ferramenta
+# que normalize texto no caminho — um copiar-colar, um pipeline de deploy, um
+# CMS. Quando some, o separador vira nada, o tooltip inteiro colapsa numa
+# linha só, e a página continua abrindo sem erro nenhum. Aconteceu duas vezes
+# durante a construção deste módulo.
+#
+# Com JSON não há separador que possa sumir nem colidir com o texto: a
+# estrutura é explícita, ``html.escape`` cuida das aspas no atributo, e o
+# arquivo gerado é ASCII-safe o bastante para atravessar qualquer transporte.
 ESPACO_FINO = chr(0x2009)  # espaço fino entre nome da série e valor
 
 
@@ -301,17 +307,19 @@ def grafico_linhas(
         )
 
     # Faixas invisíveis de captura para o crosshair — alvo maior que a marca.
-    dados_hover: list[str] = []
+    dados_hover: list[dict[str, object]] = []
     for chave in eixo_x:
         itens = []
         for serie in series:
             valor = dict(serie.pontos).get(chave)
             if valor is not None:
                 itens.append(f"{serie.nome}{ESPACO_FINO}{num(valor, casas)}{unidade}")
-        dados_hover.append(esc(rotulo_x(chave) + SEP_TITULO + SEP_ITEM.join(itens)))
+        dados_hover.append({"t": rotulo_x(chave), "i": itens})
 
     largura_faixa = (largura - m_dir - m_esq) / max(len(eixo_x), 1)
-    partes.append(f'<g class="captura" data-pontos="{"|".join(dados_hover)}">')
+    partes.append(
+        f'<g class="captura" data-pontos="{esc(json.dumps(dados_hover, ensure_ascii=False))}">'
+    )
     partes.append(
         f'<line class="crosshair" x1="0" y1="{m_topo}" x2="0" y2="{altura - m_base}" '
         f'stroke="var(--texto-3)" stroke-width="1" opacity="0"/>'
@@ -388,7 +396,10 @@ def grafico_barras_divergente(
         y = m_topo + i * (altura_barra + espaco)
         x = px(barra.valor)
         cor = "var(--pos)" if barra.valor > 0 else "var(--neg)"
-        detalhe_tip = esc(SEP_ITEM + barra.detalhe) if barra.detalhe else ""
+        corpo_tip = [f"{num_sinal(barra.valor, casas)} {unidade}"]
+        if barra.detalhe:
+            corpo_tip.append(barra.detalhe)
+        tip = json.dumps({"t": barra.rotulo, "i": corpo_tip}, ensure_ascii=False)
         inicio, comprimento = (min(zero, x), abs(x - zero))
         # Gap de 2px contra a linha de zero para as barras não se colarem nela.
         if barra.valor >= 0:
@@ -398,8 +409,7 @@ def grafico_barras_divergente(
         partes.append(
             f'<rect x="{inicio:.1f}" y="{y}" width="{comprimento:.1f}" '
             f'height="{altura_barra}" rx="4" fill="{cor}" class="barra" '
-            f'data-tip="{esc(barra.rotulo)}{SEP_TITULO}'
-            f'{esc(num_sinal(barra.valor, casas))} {esc(unidade)}{detalhe_tip}"/>'
+            f'data-tip="{esc(tip)}"/>'
         )
         partes.append(
             f'<text x="{m_esq - 12}" y="{y + altura_barra / 2 + 4:.0f}" '
@@ -522,8 +532,6 @@ def _vazio(titulo: str, motivo: str) -> str:
 
 JS_INTERACAO = r"""
 (function () {
-  var SEP = String.fromCharCode(31), ITEM = String.fromCharCode(30);
-
   function posiciona(tip, area, evt) {
     var caixa = area.getBoundingClientRect();
     var x = evt.clientX - caixa.left, y = evt.clientY - caixa.top;
@@ -531,13 +539,20 @@ JS_INTERACAO = r"""
     tip.style.top = Math.max(y - tip.offsetHeight - 12, 4) + 'px';
   }
 
+  function escapar(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  // O dado chega como JSON no atributo data-*; nada de separador in-band.
   function conteudo(bruto) {
-    var partes = bruto.split(SEP);
-    var corpo = (partes[1] || '').split(ITEM)
-      .filter(Boolean)
-      .map(function (linha) { return '<span>' + linha + '</span>'; })
+    var d;
+    try { d = JSON.parse(bruto); } catch (e) { return escapar(bruto); }
+    var corpo = (d.i || [])
+      .map(function (linha) { return '<span>' + escapar(linha) + '</span>'; })
       .join('');
-    return '<strong>' + partes[0] + '</strong>' + corpo;
+    return '<strong>' + escapar(d.t || '') + '</strong>' + corpo;
   }
 
   document.querySelectorAll('.area-grafico').forEach(function (area) {
@@ -546,7 +561,7 @@ JS_INTERACAO = r"""
 
     var captura = area.querySelector('.captura');
     if (captura) {
-      var pontos = (captura.dataset.pontos || '').split('|');
+      var pontos = JSON.parse(captura.dataset.pontos || '[]');
       var cross = captura.querySelector('.crosshair');
       captura.querySelectorAll('rect').forEach(function (faixa) {
         faixa.addEventListener('pointerenter', function (evt) {
@@ -556,7 +571,7 @@ JS_INTERACAO = r"""
             cross.setAttribute('x2', faixa.dataset.x);
             cross.setAttribute('opacity', '1');
           }
-          tip.innerHTML = conteudo(pontos[i] || '');
+          tip.innerHTML = conteudo(JSON.stringify(pontos[i] || {}));
           tip.hidden = false;
           posiciona(tip, area, evt);
         });
