@@ -97,9 +97,13 @@ def esc(texto: object) -> str:
 
 #: Separadores usados dentro de atributos ``data-*`` para o tooltip.
 #: São caracteres de controle justamente porque nunca aparecem em texto do BCB.
-SEP_TITULO = ""  # separa o título do corpo do tooltip
-SEP_ITEM = ""  # separa as linhas do corpo
-ESPACO_FINO = " "  # espaço fino entre nome da série e valor
+# Escritos com chr() de propósito. A forma com escape unicode no literal
+# sobrevive mal a ferramentas que reinterpretam escapes no caminho até o
+# repositório: o separador chega vazio, e o tooltip inteiro colapsa numa
+# linha só — sem erro nenhum, que é o pior modo de falha possível.
+SEP_TITULO = chr(0x1F)  # separa o título do corpo do tooltip
+SEP_ITEM = chr(0x1E)  # separa as linhas do corpo
+ESPACO_FINO = chr(0x2009)  # espaço fino entre nome da série e valor
 
 
 def num(valor: float, casas: int = 2) -> str:
@@ -518,7 +522,7 @@ def _vazio(titulo: str, motivo: str) -> str:
 
 JS_INTERACAO = r"""
 (function () {
-  var SEP = '', ITEM = '';
+  var SEP = String.fromCharCode(31), ITEM = String.fromCharCode(30);
 
   function posiciona(tip, area, evt) {
     var caixa = area.getBoundingClientRect();
