@@ -217,9 +217,44 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         print(f"[ok] Histórico: {len(observacoes)} observações, última em {ultima}")
         if idade_hist > IDADE_MAXIMA_DIAS:
             problemas.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
-        sem_dispersao = sum(1 for o in observacoes if o.fonte == store.FONTE_PDF)
-        if sem_dispersao:
-            avisos.append(f"{sem_dispersao} observação(ões) vieram do PDF e não têm dispersão.")
+        # Saúde da FONTE, não só da entrega.
+        #
+        # Este bloco existe por causa de uma execução real: o focus-semanal
+        # rodou, todos os passos deram verde, o commit saiu — e o histórico
+        # publicado tinha 120 linhas de uma única data, todas fonte=pdf, sem
+        # uma linha de dispersão. A API de Expectativas, que é a fonte
+        # PRIMÁRIA, não entregou nada, e nada no pipeline reclamou.
+        #
+        # `cmd_sincronizar` cai para o PDF de propósito, para o boletim de
+        # segunda não morrer por indisponibilidade momentânea do BCB. Mas
+        # "caiu para a reserva" é estado de exceção: se ninguém verifica, o
+        # projeto volta a ser o que era antes desta reestruturação — um
+        # pipeline que roda, não falha, e publica menos do que deveria.
+        da_api = sum(1 for o in observacoes if o.fonte == store.FONTE_API)
+        do_pdf = len(observacoes) - da_api
+
+        if da_api == 0:
+            problemas.append(
+                "Nenhuma observação veio da API de Expectativas — a fonte "
+                "primária não entregou nada e o histórico está inteiro na "
+                "reserva (PDF), sem dispersão. Rode "
+                "`python -m focus sincronizar --exigir-api` para ver o erro."
+            )
+        elif do_pdf:
+            avisos.append(
+                f"{do_pdf} observação(ões) vieram do PDF e não têm dispersão "
+                f"({da_api} vieram da API)."
+            )
+
+        # Uma só data no histórico significa que revisão, trajetória e
+        # amplitude saem vazias — o painel abre e não diz nada.
+        datas = an.datas_disponiveis(observacoes)
+        if len(datas) < 2:
+            problemas.append(
+                f"Histórico com {len(datas)} data(s) apenas. Sem ao menos duas "
+                "edições não há revisão, trajetória nem amplitude: o dashboard "
+                "sai vazio mesmo com o pipeline reportando sucesso."
+            )
 
     htmls = sorted(PASTA_SAIDA.glob("focus_*.html"), reverse=True)
     if not htmls:
