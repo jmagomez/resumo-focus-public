@@ -17,6 +17,7 @@ from focus.api import (
     ApiExpectativasError,
     expectativas_anuais,
     expectativas_mensais,
+    montar_url,
 )
 
 REGISTRO_ANUAL = {
@@ -120,7 +121,49 @@ def test_json_invalido_levanta():
             expectativas_anuais(indicadores=["IPCA"])
 
 
-# ── Contrato com o serviço real ───────────────────────────────────────────────
+# ── Codificação da query string ───────────────────────────────────────────
+#
+# Defeito real, corrigido em 15/09/2026: a URL era delegada ao `params=` do
+# requests, que codifica espaço como `+`. O OData do Olinda lê o `+` como
+# caractere literal e devolve HTTP 400. Efeito observado em produção (run #2 do
+# workflow "Coleta semanal do Focus"): toda consulta falhava, o pipeline caía na
+# reserva do PDF e publicava histórico sem dispersão — reportando sucesso.
+
+
+def test_url_codifica_espaco_como_pct20_e_nunca_como_mais():
+    url = montar_url(
+        "ExpectativasMercadoAnuais",
+        {"$orderby": "Data asc", "$filter": "Indicador eq 'IPCA' and Data ge '2026-09-01'"},
+    )
+    assert "+" not in url, (
+        f"Espaço codificado como '+' na URL: {url}. O Olinda responde HTTP 400 "
+        "('has the not-allowed value', 'The URI is malformed') quando isso acontece."
+    )
+    assert "Data%20asc" in url
+    assert "Indicador%20eq%20%27IPCA%27" in url
+
+
+def test_consultar_passa_url_pronta_e_nao_params():
+    """A montagem da URL não pode voltar a ser delegada ao requests."""
+    with patch("focus.api.requests.get", return_value=_resposta([REGISTRO_ANUAL])) as get:
+        expectativas_anuais(indicadores=["IPCA"])
+
+    (url,), kwargs = get.call_args
+    assert "params" not in kwargs, (
+        "consultar() voltou a usar params= do requests, que codifica espaço como '+'."
+    )
+    assert url.startswith("https://olinda.bcb.gov.br/")
+    assert "?" in url and "+" not in url
+
+
+def test_indicador_com_acento_e_aspas_sobrevive_a_codificacao():
+    """'Câmbio' e as aspas do OData precisam sair percent-encoded, não cru."""
+    url = montar_url("X", {"$filter": "Indicador eq 'Câmbio'"})
+    assert "C%C3%A2mbio" in url
+    assert "%27" in url and "'" not in url
+
+
+# ── Contrato com o serviço real ───────────────────────────────────────────
 
 
 @pytest.mark.network
