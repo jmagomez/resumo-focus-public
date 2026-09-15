@@ -17,7 +17,14 @@ Thumbs.db
 .idea/
 .vscode/
 
-# data/focus_*.pdf e data/focus_*.txt são versionados: o Action de download
-# commita ambos e a rotina agendada do agente lê o .txt (routine-prompt.md)
+# PDFs do Focus não são mais versionados: ~780 KB por edição, ~40 MB/ano.
+# A partir da v2 eles são artifact do workflow (90 dias) e o repositório guarda
+# o .txt (12 KB) mais o histórico estruturado em data/history/.
+data/*.pdf
 
-# output/focus/ é versionado de propósito: guarda os resumos gerados pelo agente
+# Versionados de propósito:
+#   data/focus_*.txt      — texto de origem que o agente lê e que os testes usam
+#   data/history/*.csv    — histórico longitudinal das expectativas
+#   docs/index.html       — dashboard publicado no GitHub Pages
+#   output/focus/*.md     — prosa escrita pelo agente
+#   output/focus/*.html   — e-mail efetivamente enviado

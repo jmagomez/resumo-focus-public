@@ -1,5 +1,5 @@
-requests==2.32.3
-pdfplumber==0.11.4
-pytest==8.3.3
-streamlit>=1.35
-pandas>=2.0
+# Dependências de runtime do pipeline.
+# Ferramentas de teste e lint ficam em requirements-dev.txt — a versão anterior
+# misturava pytest e streamlit aqui, inflando o ambiente de produção.
+requests>=2.32,<3
+pdfplumber>=0.11,<0.12
