@@ -1,0 +1,86 @@
+name: Coleta semanal do Focus
+
+# Segunda-feira: baixa o PDF, extrai o texto, sincroniza o histórico com a API
+# de Expectativas do BCB e regenera o dashboard.
+#
+# Mudança em relação à versão anterior: o **PDF não é mais commitado**. Ele vira
+# artifact do workflow (90 dias de retenção). O repositório passou a versionar
+# apenas o .txt (12 KB contra 780 KB por edição) e o histórico estruturado.
+
+on:
+  schedule:
+    - cron: "15 12 * * 1"   # 09h15 BRT
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: focus-semanal
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Baixar e extrair o boletim
+        run: python -m focus baixar
+
+      - name: Arquivar o PDF como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focus-pdf-${{ github.run_number }}
+          path: data/focus_*.pdf
+          retention-days: 90
+          if-no-files-found: error
+
+      # A API é a fonte primária; --exigir-api falharia a coleta inteira quando
+      # o serviço do BCB estivesse fora do ar, então aqui ele fica desligado e o
+      # parser do PDF entra como reserva. O passo seguinte registra qual fonte
+      # alimentou o histórico.
+      - name: Sincronizar o histórico de expectativas
+        run: python -m focus sincronizar
+
+      - name: Gerar o dashboard
+        run: python -m focus dashboard
+
+      - name: Verificar a saúde do pipeline
+        id: verificar
+        continue-on-error: true
+        run: python -m focus verificar
+
+      - name: Commitar texto, histórico e dashboard
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/focus_*.txt data/history/ docs/
+          git diff --staged --quiet || git commit -m "chore: focus $(date +%Y-%m-%d)"
+          git push
+
+      - name: Notificar falha por e-mail
+        if: failure()
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.FOCUS_SMTP_USER }}
+          password: ${{ secrets.FOCUS_SMTP_APP_PASSWORD }}
+          to: ${{ secrets.FOCUS_EMAIL_DEST }}
+          from: Boletim Focus <${{ secrets.FOCUS_SMTP_USER }}>
+          subject: "⚠️ Coleta do Focus falhou (run ${{ github.run_number }})"
+          body: |
+            A coleta semanal do Boletim Focus falhou. A rotina de resumo de
+            segunda-feira não vai encontrar dados novos.
+
+            Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

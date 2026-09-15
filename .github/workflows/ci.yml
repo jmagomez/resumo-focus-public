@@ -1,45 +1,61 @@
-# Adicionar como .github/workflows/ci.yml
-# Serve para: oil-gas-financial-dashboard, vendas-liquidos, projeto_bloomberg, resumo-focus-public
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "data/**"
-      - "docs/**"
-      - "output/**"
+    paths-ignore: ["data/**", "docs/**", "output/**"]
   pull_request:
-    paths-ignore:
-      - "data/**"
-      - "docs/**"
-      - "output/**"
+    paths-ignore: ["data/**", "docs/**", "output/**"]
+  schedule:
+    - cron: "0 13 * * 1"   # após a coleta: valida o contrato da API do BCB
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  testes:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
+          cache: pip
 
-      - name: Instalar dependencias
+      - name: Instalar dependências
         run: |
-          [ -f requirements.txt ] && pip install -r requirements.txt || true
+          pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Lint (ruff) — informativo
-        continue-on-error: true
+      # Lint deixou de ser informativo: `continue-on-error` tornava o ruff
+      # decorativo — ele apontava problemas e o CI seguia verde.
+      - name: Lint (ruff)
         run: ruff check --output-format=github .
 
-      - name: Formatacao (ruff) — informativo
-        continue-on-error: true
+      - name: Formatação (ruff)
         run: ruff format --check .
 
-      - name: Testes (pytest)
-        run: pytest
+      - name: Testes offline
+        run: pytest -q
+
+  contrato-api:
+    # Só no agendamento e no disparo manual: não faz sentido bater na API do
+    # BCB a cada push, mas uma mudança de contrato precisa ser detectada antes
+    # da próxima segunda-feira.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Contrato da API de Expectativas
+        run: pytest -m network -q

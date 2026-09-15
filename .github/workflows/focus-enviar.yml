@@ -1,23 +1,26 @@
-name: Enviar Resumo Focus
+name: Enviar resumo do Focus
+
+# Dispara quando o agente publica a prosa da semana em output/focus/*.md.
+# O HTML do e-mail é montado pelo código a partir do histórico já validado —
+# o agente escreve texto, nunca tabela.
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - "output/focus/focus_*.html"
+      - "output/focus/focus_*.md"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   enviar:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -25,10 +28,20 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: Enviar e-mail
+      - name: Montar e enviar
         env:
           FOCUS_SMTP_USER:         ${{ secrets.FOCUS_SMTP_USER }}
           FOCUS_SMTP_APP_PASSWORD: ${{ secrets.FOCUS_SMTP_APP_PASSWORD }}
           FOCUS_EMAIL_DEST:        ${{ secrets.FOCUS_EMAIL_DEST }}
           FOCUS_EMAIL_BCC:         ${{ secrets.FOCUS_EMAIL_BCC }}
-        run: python src/enviar_email.py
+        run: |
+          python -m focus email \
+            --url-dashboard "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+
+      - name: Commitar o HTML enviado
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/focus/
+          git diff --staged --quiet || git commit -m "chore: HTML do resumo enviado"
+          git push
