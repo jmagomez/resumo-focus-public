@@ -125,7 +125,62 @@ def test_verificar_detecta_pipeline_parado(tmp_path, monkeypatch, capsys):
     assert "não está entregando" in saida_texto.err
 
 
+def _historico_saudavel(caminho):
+    """Histórico como o de um pipeline funcionando: API entregando, 2+ edições.
+
+    Antes este teste usava um histórico de uma só edição, toda vinda do PDF, e
+    afirmava que aquilo era saudável. Não era: foi exatamente o estado em que o
+    focus-semanal publicou um dashboard sem revisões e sem dispersão, com todos
+    os passos em verde.
+    """
+    observacoes = []
+    for data, valor in (("2026-09-04", 5.01), ("2026-09-11", 4.90)):
+        observacoes.append(
+            store.Observacao(
+                data=data,
+                indicador="IPCA",
+                horizonte="anual",
+                referencia="2026",
+                base_calculo=0,
+                mediana=valor,
+                media=valor + 0.01,
+                desvio_padrao=0.25,
+                minimo=valor - 0.5,
+                maximo=valor + 0.5,
+                n_respondentes=147,
+                fonte=store.FONTE_API,
+            )
+        )
+    store.mesclar(observacoes, caminho)
+    return caminho
+
+
 def test_verificar_aprova_pipeline_saudavel(tmp_path, monkeypatch, capsys):
+    dados = tmp_path / "data"
+    saida = tmp_path / "output" / "focus"
+    dados.mkdir(parents=True)
+    saida.mkdir(parents=True)
+    (dados / "focus_2026-09-11.txt").write_text(
+        fixture("focus_bloco_vazio.txt").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (saida / "focus_2026-09-11.html").write_text("<html></html>", encoding="utf-8")
+
+    historico = _historico_saudavel(tmp_path / "hist.csv")
+
+    monkeypatch.setattr("focus.cli.PASTA_DADOS", dados)
+    monkeypatch.setattr("focus.cli.PASTA_SAIDA", saida)
+
+    codigo = main(["verificar", "--historico", str(historico), "--hoje", "2026-09-14"])
+    capsys.readouterr()
+    assert codigo == 0
+
+
+def test_verificar_reprova_historico_so_com_pdf(tmp_path, monkeypatch, capsys):
+    """A fonte primária não entregou nada — e isso não pode passar em verde.
+
+    Caso real: o focus-semanal rodou, deu verde em todos os passos e commitou
+    um histórico de 120 linhas, uma só data, todas fonte=pdf, sem dispersão.
+    """
     dados = tmp_path / "data"
     saida = tmp_path / "output" / "focus"
     dados.mkdir(parents=True)
@@ -142,5 +197,45 @@ def test_verificar_aprova_pipeline_saudavel(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("focus.cli.PASTA_SAIDA", saida)
 
     codigo = main(["verificar", "--historico", str(historico), "--hoje", "2026-09-14"])
-    capsys.readouterr()
-    assert codigo == 0
+    erro = capsys.readouterr().err
+    assert codigo == 1
+    assert "fonte primária não entregou" in erro
+
+
+def test_verificar_reprova_historico_de_uma_data_so(tmp_path, monkeypatch, capsys):
+    """Uma edição só: revisão, trajetória e amplitude saem vazias."""
+    dados = tmp_path / "data"
+    saida = tmp_path / "output" / "focus"
+    dados.mkdir(parents=True)
+    saida.mkdir(parents=True)
+    (dados / "focus_2026-09-11.txt").write_text(
+        fixture("focus_bloco_vazio.txt").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (saida / "focus_2026-09-11.html").write_text("<html></html>", encoding="utf-8")
+
+    historico = tmp_path / "hist.csv"
+    store.mesclar(
+        [
+            store.Observacao(
+                data="2026-09-11",
+                indicador="IPCA",
+                horizonte="anual",
+                referencia="2026",
+                base_calculo=0,
+                mediana=4.90,
+                media=4.91,
+                desvio_padrao=0.25,
+                n_respondentes=147,
+                fonte=store.FONTE_API,
+            )
+        ],
+        historico,
+    )
+
+    monkeypatch.setattr("focus.cli.PASTA_DADOS", dados)
+    monkeypatch.setattr("focus.cli.PASTA_SAIDA", saida)
+
+    codigo = main(["verificar", "--historico", str(historico), "--hoje", "2026-09-14"])
+    erro = capsys.readouterr().err
+    assert codigo == 1
+    assert "1 data(s) apenas" in erro
