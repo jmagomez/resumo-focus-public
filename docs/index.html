@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Boletim Focus — expectativas de mercado</title><meta name="color-scheme" content="light dark"><style>
+:root, .viz {
+  --surface:        #fcfcfb;
+  --surface-alt:    #f4f3f0;
+  --borda:          #e2e0da;
+  --texto:          #0b0b0b;
+  --texto-2:        #52514e;
+  --texto-3:        #77756e;
+  --grade:          #e6e4de;
+  --serie-1:        #2a78d6;
+  --serie-2:        #eb6834;
+  --serie-3:        #1baf7a;
+  --serie-4:        #eda100;
+  --pos:            #d03b3b;
+  --neg:            #2a78d6;
+  --neutro:         #cfcdc6;
+  --bom:            #0ca30c;
+  --critico:        #d03b3b;
+  --banda:          rgba(42,120,214,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])), :root:where(:not([data-theme="light"])) .viz {
+    --surface:      #1a1a19;
+    --surface-alt:  #232321;
+    --borda:        #383835;
+    --texto:        #ffffff;
+    --texto-2:      #c3c2b7;
+    --texto-3:      #96948b;
+    --grade:        #2f2f2c;
+    --serie-1:      #3987e5;
+    --serie-2:      #d95926;
+    --serie-3:      #199e70;
+    --serie-4:      #c98500;
+    --pos:          #e66767;
+    --neg:          #3987e5;
+    --neutro:       #4a4a46;
+    --bom:          #0ca30c;
+    --critico:      #d03b3b;
+    --banda:        rgba(57,135,229,.16);
+  }
+}
+:root[data-theme="dark"], :root[data-theme="dark"] .viz {
+  --surface:        #1a1a19;
+  --surface-alt:    #232321;
+  --borda:          #383835;
+  --texto:          #ffffff;
+  --texto-2:        #c3c2b7;
+  --texto-3:        #96948b;
+  --grade:          #2f2f2c;
+  --serie-1:        #3987e5;
+  --serie-2:        #d95926;
+  --serie-3:        #199e70;
+  --serie-4:        #c98500;
+  --pos:            #e66767;
+  --neg:            #3987e5;
+  --neutro:         #4a4a46;
+  --bom:            #0ca30c;
+  --critico:        #d03b3b;
+  --banda:          rgba(57,135,229,.16);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--texto);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.viz { min-height: 100vh; padding-block: 28px; background: var(--surface); }
+.envelope { max-width: 900px; margin: 0 auto; padding-inline: 16px; }
+header.topo { border-bottom: 1px solid var(--borda); padding-bottom: 18px; margin-bottom: 26px; }
+header.topo h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -.02em; }
+header.topo .sub { margin: 0; color: var(--texto-2); font-size: 14px; }
+.selo {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--borda); color: var(--texto-2); background: var(--surface-alt);
+}
+.selo.alerta { color: var(--critico); border-color: var(--critico); }
+.cartoes {
+  display: grid; gap: 12px; margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.cartao {
+  border: 1px solid var(--borda); border-radius: 10px; padding: 14px 16px;
+  background: var(--surface-alt);
+}
+.cartao h3 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--texto-2);
+  text-transform: uppercase; letter-spacing: .04em; }
+.cartao .valor { margin: 0; font-size: 30px; font-weight: 650; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; }
+.cartao .valor small { font-size: 13px; font-weight: 500; color: var(--texto-3); margin-left: 5px; }
+.delta { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+.delta.bom { color: var(--bom); }
+.delta.ruim { color: var(--critico); }
+.delta.neutro { color: var(--texto-3); }
+.faisca { display: block; margin-top: 8px; width: 104px; height: 26px; }
+.nota { margin: 6px 0 0; font-size: 12.5px; color: var(--texto-3); }
+.figura { margin: 0 0 32px; }
+.figura figcaption h3 { margin: 0 0 2px; font-size: 17px; letter-spacing: -.01em; }
+.figura figcaption p { margin: 0 0 10px; color: var(--texto-2); font-size: 13.5px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12.5px;
+  color: var(--texto-2); }
+.item-legenda { display: inline-flex; align-items: center; gap: 6px; }
+.item-legenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.area-grafico { position: relative; overflow-x: auto; }
+.grafico { width: 100%; height: auto; display: block; min-width: 460px; }
+text.eixo { fill: var(--texto-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+text.eixo-ref { fill: var(--texto-3); font-size: 11px; font-weight: 600; }
+text.rotulo-serie { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+text.rotulo-barra { fill: var(--texto-2); font-size: 12px; }
+text.valor-barra { fill: var(--texto-2); font-size: 11.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+text.valor-barra.dentro { fill: #ffffff; }
+.barra { cursor: default; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 5; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--borda); border-radius: 8px;
+  padding: 7px 10px; font-size: 12.5px; line-height: 1.45; color: var(--texto);
+  box-shadow: 0 6px 20px rgba(0,0,0,.14); font-variant-numeric: tabular-nums;
+}
+.tooltip strong { display: block; margin-bottom: 3px; }
+.tooltip span { display: block; color: var(--texto-2); }
+button.alternar {
+  border: 1px solid var(--borda); background: var(--surface-alt); color: var(--texto-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 12.5px; cursor: pointer; font: inherit;
+  font-size: 12.5px;
+}
+button.alternar:hover { color: var(--texto); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px;
+  font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 9px; border-bottom: 1px solid var(--borda); }
+th:first-child, td:first-child { text-align: left; }
+thead th { color: var(--texto-2); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .03em; }
+tbody tr:hover { background: var(--surface-alt); }
+.secao { margin-bottom: 36px; }
+.secao > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--texto-3); margin: 0 0 14px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--borda); }
+footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--borda);
+  color: var(--texto-3); font-size: 12.5px; }
+footer a { color: inherit; }
+@media (max-width: 640px) {
+  .cartao .valor { font-size: 25px; }
+  header.topo h1 { font-size: 21px; }
+}
+</style></head><body><div class="viz"><div class="envelope"><header class=topo><h1>Boletim Focus — expectativas de mercado</h1><p class="sub">Banco Central do Brasil · pesquisa Focus · medianas agregadas e dispersão entre respondentes</p><span class="selo">Dados de 11 de setembro de 2026</span></header><div class="cartoes"><article class="cartao"><h3>IPCA · 2026</h3><p class="valor">4,90<small>%</small></p><span class="delta neutro"><span aria-hidden="true">→</span> 0,00 p.p.</span><p class=nota>147 respondentes</p></article><article class="cartao"><h3>Selic · 2026</h3><p class="valor">13,75<small>% a.a.</small></p><span class="delta neutro"><span aria-hidden="true">→</span> 0,00 p.p.</span><p class=nota>143 respondentes</p></article><article class="cartao"><h3>Câmbio · 2026</h3><p class="valor">5,20<small>R$/US$</small></p><span class="delta neutro"><span aria-hidden="true">→</span> 0,00 R$</span><p class=nota>113 respondentes</p></article><article class="cartao"><h3>PIB · 2026</h3><p class="valor">1,89<small>%</small></p><span class="delta neutro"><span aria-hidden="true">→</span> 0,00 p.p.</span><p class=nota>112 respondentes</p></article></div><section class="secao"><h2>Trajetória</h2><figure class="figura"><figcaption><h3>Trajetória das expectativas de IPCA</h3><p>Mediana por ano de referência, edição a edição. A linha tracejada é o centro da meta contínua (3,00%).</p></figcaption><div class="legenda"><span class="item-legenda"><i style="background:var(--serie-1)"></i>2026</span><span class="item-legenda"><i style="background:var(--serie-2)"></i>2027</span><span class="item-legenda"><i style="background:var(--serie-3)"></i>2028</span><span class="item-legenda"><i style="background:var(--serie-4)"></i>2029</span></div><div class="area-grafico"><svg class="grafico" id="g-trajetoria" viewBox="0 0 760 320" role="img" aria-label="Trajetória das expectativas de IPCA" preserveAspectRatio="xMidYMid meet"><line x1="54" y1="286.0" x2="664" y2="286.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="289.5" text-anchor="end" class="eixo">3,00</text><line x1="54" y1="151.0" x2="664" y2="151.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="154.5" text-anchor="end" class="eixo">4,00</text><line x1="54" y1="16.0" x2="664" y2="16.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="19.5" text-anchor="end" class="eixo">5,00</text><line x1="54" y1="286.0" x2="664" y2="286.0" stroke="var(--texto-3)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="670" y="289.5" class="eixo-ref">meta</text><text x="54.0" y="304" text-anchor="start" class="eixo">11/09</text><path d="M54.0,29.5" fill="none" stroke="var(--serie-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="54.0" cy="29.5" r="4" fill="var(--serie-1)" stroke="var(--surface)" stroke-width="2"/><text x="64.0" y="33.5" class="rotulo-serie" fill="var(--serie-1)">2026 4,90</text><path d="M54.0,110.5" fill="none" stroke="var(--serie-2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="54.0" cy="110.5" r="4" fill="var(--serie-2)" stroke="var(--surface)" stroke-width="2"/><text x="64.0" y="114.5" class="rotulo-serie" fill="var(--serie-2)">2027 4,30</text><path d="M54.0,178.0" fill="none" stroke="var(--serie-3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="54.0" cy="178.0" r="4" fill="var(--serie-3)" stroke="var(--surface)" stroke-width="2"/><text x="64.0" y="182.0" class="rotulo-serie" fill="var(--serie-3)">2028 3,80</text><path d="M54.0,218.5" fill="none" stroke="var(--serie-4)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="54.0" cy="218.5" r="4" fill="var(--serie-4)" stroke="var(--surface)" stroke-width="2"/><text x="64.0" y="222.5" class="rotulo-serie" fill="var(--serie-4)">2029 3,50</text><g class="captura" data-pontos="[{&quot;t&quot;: &quot;11/09&quot;, &quot;i&quot;: [&quot;2026 4,90%&quot;, &quot;2027 4,30%&quot;, &quot;2028 3,80%&quot;, &quot;2029 3,50%&quot;]}]"><line class="crosshair" x1="0" y1="16" x2="0" y2="286" stroke="var(--texto-3)" stroke-width="1" opacity="0"/><rect x="-251.0" y="16" width="610.0" height="270" fill="transparent" data-i="0" data-x="54.0"/></g></svg><div class="tooltip" hidden></div></div></figure></section><section class="secao"><h2>Ancoragem</h2><figure class="figura"><figcaption><h3>Ancoragem — expectativa de IPCA por horizonte</h3><p>Meta contínua de 3,00% com banda de ±1,5 p.p. Convergência ao centro nos anos longos é a medida de credibilidade; o ano corrente já está largamente determinado.</p></figcaption><div class="legenda"><span class="item-legenda"><i style="background:var(--serie-1)"></i>IPCA</span></div><div class="area-grafico"><svg class="grafico" id="g-ancoragem" viewBox="0 0 760 260" role="img" aria-label="Ancoragem — expectativa de IPCA por horizonte" preserveAspectRatio="xMidYMid meet"><rect x="54" y="51.0" width="610" height="175.0" fill="var(--banda)"/><line x1="54" y1="226.0" x2="664" y2="226.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="229.5" text-anchor="end" class="eixo">2,00</text><line x1="54" y1="156.0" x2="664" y2="156.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="159.5" text-anchor="end" class="eixo">3,00</text><line x1="54" y1="86.0" x2="664" y2="86.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="89.5" text-anchor="end" class="eixo">4,00</text><line x1="54" y1="16.0" x2="664" y2="16.0" stroke="var(--grade)" stroke-width="1"/><text x="46" y="19.5" text-anchor="end" class="eixo">5,00</text><line x1="54" y1="156.0" x2="664" y2="156.0" stroke="var(--texto-3)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="670" y="159.5" class="eixo-ref">meta</text><text x="54.0" y="244" text-anchor="start" class="eixo">2026</text><text x="257.3" y="244" text-anchor="middle" class="eixo">2027</text><text x="460.7" y="244" text-anchor="middle" class="eixo">2028</text><text x="664.0" y="244" text-anchor="end" class="eixo">2029</text><path d="M54.0,23.0 L257.3,65.0 L460.7,100.0 L664.0,121.0" fill="none" stroke="var(--serie-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="664.0" cy="121.0" r="4" fill="var(--serie-1)" stroke="var(--surface)" stroke-width="2"/><text x="674.0" y="125.0" class="rotulo-serie" fill="var(--serie-1)">IPCA 3,50</text><g class="captura" data-pontos="[{&quot;t&quot;: &quot;2026&quot;, &quot;i&quot;: [&quot;IPCA 4,90%&quot;]}, {&quot;t&quot;: &quot;2027&quot;, &quot;i&quot;: [&quot;IPCA 4,30%&quot;]}, {&quot;t&quot;: &quot;2028&quot;, &quot;i&quot;: [&quot;IPCA 3,80%&quot;]}, {&quot;t&quot;: &quot;2029&quot;, &quot;i&quot;: [&quot;IPCA 3,50%&quot;]}]"><line class="crosshair" x1="0" y1="16" x2="0" y2="226" stroke="var(--texto-3)" stroke-width="1" opacity="0"/><rect x="-22.2" y="16" width="152.5" height="210" fill="transparent" data-i="0" data-x="54.0"/><rect x="181.1" y="16" width="152.5" height="210" fill="transparent" data-i="1" data-x="257.3"/><rect x="384.4" y="16" width="152.5" height="210" fill="transparent" data-i="2" data-x="460.7"/><rect x="587.8" y="16" width="152.5" height="210" fill="transparent" data-i="3" data-x="664.0"/></g></svg><div class="tooltip" hidden></div></div></figure><button class="alternar" type="button" aria-expanded="false" data-alvo-tabela="t-ancoragem">Ver dados em tabela</button><div id="t-ancoragem" hidden><table><thead><tr><th scope=col>Ano</th><th scope=col>Expectativa (%)</th><th scope=col>Desvio do centro (p.p.)</th><th scope=col>Situação</th></tr></thead><tbody><tr><td>2026</td><td>4,90</td><td>+1,90</td><td>fora da banda (acima)</td></tr><tr><td>2027</td><td>4,30</td><td>+1,30</td><td>acima do centro</td></tr><tr><td>2028</td><td>3,80</td><td>+0,80</td><td>acima do centro</td></tr><tr><td>2029</td><td>3,50</td><td>+0,50</td><td>acima do centro</td></tr></tbody></table></div></section><section class="secao"><h2>Indicador antecedente</h2><figure class="figura"><figcaption><h3>Gap entre a base de 5 dias úteis e a de 30 dias</h3><p>Apenas indicadores medidos em p.p. A base curta incorpora informação nova antes da mediana cheia; gap do mesmo sinal por várias semanas costuma anteceder a revisão da mediana.</p></figcaption><div class="legenda"><span class="item-legenda"><i style="background:var(--pos)"></i>revisado para cima</span><span class="item-legenda"><i style="background:var(--neg)"></i>revisado para baixo</span></div><div class="area-grafico"><svg class="grafico" id="g-gap" viewBox="0 0 760 338" role="img" aria-label="Gap entre a base de 5 dias úteis e a de 30 dias" preserveAspectRatio="xMidYMid meet"><line x1="444.0" y1="12" x2="444.0" y2="312" stroke="var(--neutro)" stroke-width="1.5"/><rect x="310.7" y="12" width="131.3" height="22" rx="4" fill="var(--neg)" class="barra" data-tip="{&quot;t&quot;: &quot;Selic · 2026&quot;, &quot;i&quot;: [&quot;-0,19 p.p.&quot;, &quot;mediana de 30 dias: 13,75&quot;]}"/><text x="192" y="27" text-anchor="end" class="rotulo-barra">Selic · 2026</text><text x="318.7" y="27" text-anchor="start" class="valor-barra dentro">-0,19</text><rect x="359.8" y="42" width="82.2" height="22" rx="4" fill="var(--neg)" class="barra" data-tip="{&quot;t&quot;: &quot;PIB · 2027&quot;, &quot;i&quot;: [&quot;-0,12 p.p.&quot;, &quot;mediana de 30 dias: 1,45&quot;]}"/><text x="192" y="57" text-anchor="end" class="rotulo-barra">PIB · 2027</text><text x="367.8" y="57" text-anchor="start" class="valor-barra dentro">-0,12</text><rect x="423.0" y="72" width="19.0" height="22" rx="4" fill="var(--neg)" class="barra" data-tip="{&quot;t&quot;: &quot;PIB · 2026&quot;, &quot;i&quot;: [&quot;-0,03 p.p.&quot;, &quot;mediana de 30 dias: 1,89&quot;]}"/><text x="192" y="87" text-anchor="end" class="rotulo-barra">PIB · 2026</text><text x="415.0" y="87" text-anchor="end" class="valor-barra">-0,03</text><rect x="437.0" y="102" width="5.0" height="22" rx="4" fill="var(--neg)" class="barra" data-tip="{&quot;t&quot;: &quot;IGP-M · 2027&quot;, &quot;i&quot;: [&quot;-0,01 p.p.&quot;, &quot;mediana de 30 dias: 4,11&quot;]}"/><text x="192" y="117" text-anchor="end" class="rotulo-barra">IGP-M · 2027</text><text x="429.0" y="117" text-anchor="end" class="valor-barra">-0,01</text><rect x="446.0" y="132" width="12.0" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;Result. primário · 2027&quot;, &quot;i&quot;: [&quot;+0,02 p.p.&quot;, &quot;mediana de 30 dias: -0,40&quot;]}"/><text x="192" y="147" text-anchor="end" class="rotulo-barra">Result. primário · 2027</text><text x="466.0" y="147" text-anchor="start" class="valor-barra">+0,02</text><rect x="446.0" y="162" width="26.1" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;IPCA Administr. · 2027&quot;, &quot;i&quot;: [&quot;+0,04 p.p.&quot;, &quot;mediana de 30 dias: 3,85&quot;]}"/><text x="192" y="177" text-anchor="end" class="rotulo-barra">IPCA Administr. · 2027</text><text x="480.1" y="177" text-anchor="start" class="valor-barra">+0,04</text><rect x="446.0" y="192" width="33.1" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;IPCA · 2026&quot;, &quot;i&quot;: [&quot;+0,05 p.p.&quot;, &quot;mediana de 30 dias: 4,90&quot;]}"/><text x="192" y="207" text-anchor="end" class="rotulo-barra">IPCA · 2026</text><text x="487.1" y="207" text-anchor="start" class="valor-barra">+0,05</text><rect x="446.0" y="222" width="33.1" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;Result. primário · 2026&quot;, &quot;i&quot;: [&quot;+0,05 p.p.&quot;, &quot;mediana de 30 dias: -0,45&quot;]}"/><text x="192" y="237" text-anchor="end" class="rotulo-barra">Result. primário · 2026</text><text x="487.1" y="237" text-anchor="start" class="valor-barra">+0,05</text><rect x="446.0" y="252" width="68.1" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;DLSP · 2027&quot;, &quot;i&quot;: [&quot;+0,10 p.p.&quot;, &quot;mediana de 30 dias: 73,70&quot;]}"/><text x="192" y="267" text-anchor="end" class="rotulo-barra">DLSP · 2027</text><text x="506.1" y="267" text-anchor="end" class="valor-barra dentro">+0,10</text><rect x="446.0" y="282" width="201.4" height="22" rx="4" fill="var(--pos)" class="barra" data-tip="{&quot;t&quot;: &quot;IGP-M · 2026&quot;, &quot;i&quot;: [&quot;+0,29 p.p.&quot;, &quot;mediana de 30 dias: 4,54&quot;]}"/><text x="192" y="297" text-anchor="end" class="rotulo-barra">IGP-M · 2026</text><text x="639.4" y="297" text-anchor="end" class="valor-barra dentro">+0,29</text><text x="444.0" y="330" text-anchor="middle" class="eixo">0</text></svg><div class="tooltip" hidden></div></div></figure></section><section class="secao"><h2>Dispersão</h2><p class="nota">Dispersão disponível apenas para semanas coletadas pela API de Expectativas do BCB — as edições lidas somente do PDF não trazem desvio-padrão, mínimo e máximo.</p></section><footer><p><strong>Amplitude das revisões nesta edição:</strong> sem revisões.</p><p>Fonte primária: <a href="https://dadosabertos.bcb.gov.br/dataset/expectativas-mercado">API de Expectativas de Mercado do Banco Central</a>; o PDF do <a href="https://www.bcb.gov.br/publicacoes/focus">Focus — Relatório de Mercado</a> é arquivado como prova documental. Nenhum valor desta página é estimado, interpolado ou arredondado além das casas publicadas pelo BCB.</p><p>Gerado em 15/09/2026 · 98 observações no histórico.</p></footer></div></div><script>
+(function () {
+  function posiciona(tip, area, evt) {
+    var caixa = area.getBoundingClientRect();
+    var x = evt.clientX - caixa.left, y = evt.clientY - caixa.top;
+    tip.style.left = Math.min(Math.max(x + 14, 4), caixa.width - tip.offsetWidth - 4) + 'px';
+    tip.style.top = Math.max(y - tip.offsetHeight - 12, 4) + 'px';
+  }
+
+  function escapar(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  // O dado chega como JSON no atributo data-*; nada de separador in-band.
+  function conteudo(bruto) {
+    var d;
+    try { d = JSON.parse(bruto); } catch (e) { return escapar(bruto); }
+    var corpo = (d.i || [])
+      .map(function (linha) { return '<span>' + escapar(linha) + '</span>'; })
+      .join('');
+    return '<strong>' + escapar(d.t || '') + '</strong>' + corpo;
+  }
+
+  document.querySelectorAll('.area-grafico').forEach(function (area) {
+    var tip = area.querySelector('.tooltip');
+    if (!tip) return;
+
+    var captura = area.querySelector('.captura');
+    if (captura) {
+      var pontos = JSON.parse(captura.dataset.pontos || '[]');
+      var cross = captura.querySelector('.crosshair');
+      captura.querySelectorAll('rect').forEach(function (faixa) {
+        faixa.addEventListener('pointerenter', function (evt) {
+          var i = +faixa.dataset.i;
+          if (cross) {
+            cross.setAttribute('x1', faixa.dataset.x);
+            cross.setAttribute('x2', faixa.dataset.x);
+            cross.setAttribute('opacity', '1');
+          }
+          tip.innerHTML = conteudo(JSON.stringify(pontos[i] || {}));
+          tip.hidden = false;
+          posiciona(tip, area, evt);
+        });
+        faixa.addEventListener('pointermove', function (evt) { posiciona(tip, area, evt); });
+      });
+      area.addEventListener('pointerleave', function () {
+        tip.hidden = true;
+        if (cross) cross.setAttribute('opacity', '0');
+      });
+    }
+
+    area.querySelectorAll('[data-tip]').forEach(function (marca) {
+      marca.addEventListener('pointerenter', function (evt) {
+        tip.innerHTML = conteudo(marca.dataset.tip);
+        tip.hidden = false;
+        posiciona(tip, area, evt);
+      });
+      marca.addEventListener('pointermove', function (evt) { posiciona(tip, area, evt); });
+      marca.addEventListener('pointerleave', function () { tip.hidden = true; });
+    });
+  });
+
+  document.querySelectorAll('[data-alvo-tabela]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      var alvo = document.getElementById(botao.dataset.alvoTabela);
+      if (!alvo) return;
+      alvo.hidden = !alvo.hidden;
+      botao.setAttribute('aria-expanded', String(!alvo.hidden));
+      botao.textContent = alvo.hidden ? 'Ver dados em tabela' : 'Ocultar tabela';
+    });
+  });
+})();
+</script></body></html>

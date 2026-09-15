@@ -1,0 +1,99 @@
+data,indicador,horizonte,referencia,base_calculo,mediana,media,desvio_padrao,minimo,maximo,n_respondentes,fonte
+2026-09-11,Balança comercial,anual,2026,0,76.95,,,,,40,pdf
+2026-09-11,Balança comercial,anual,2026,1,76.9,,,,,27,pdf
+2026-09-11,Balança comercial,anual,2027,0,79,,,,,39,pdf
+2026-09-11,Balança comercial,anual,2027,1,79,,,,,27,pdf
+2026-09-11,Balança comercial,anual,2028,0,77.66,,,,,34,pdf
+2026-09-11,Balança comercial,anual,2029,0,80,,,,,29,pdf
+2026-09-11,Conta corrente,anual,2026,0,-60,,,,,41,pdf
+2026-09-11,Conta corrente,anual,2026,1,-60.85,,,,,26,pdf
+2026-09-11,Conta corrente,anual,2027,0,-59.3,,,,,39,pdf
+2026-09-11,Conta corrente,anual,2027,1,-58.9,,,,,26,pdf
+2026-09-11,Conta corrente,anual,2028,0,-62.36,,,,,30,pdf
+2026-09-11,Conta corrente,anual,2029,0,-62,,,,,28,pdf
+2026-09-11,Câmbio,anual,2026,0,5.2,,,,,113,pdf
+2026-09-11,Câmbio,anual,2026,1,5.2,,,,,75,pdf
+2026-09-11,Câmbio,anual,2027,0,5.28,,,,,113,pdf
+2026-09-11,Câmbio,anual,2027,1,5.3,,,,,75,pdf
+2026-09-11,Câmbio,anual,2028,0,5.3,,,,,83,pdf
+2026-09-11,Câmbio,anual,2029,0,5.36,,,,,78,pdf
+2026-09-11,Câmbio,mensal,2026-09,0,5.15,,,,,110,pdf
+2026-09-11,Câmbio,mensal,2026-09,1,5.15,,,,,,pdf
+2026-09-11,Câmbio,mensal,2026-10,0,5.19,,,,,109,pdf
+2026-09-11,Câmbio,mensal,2026-10,1,5.18,,,,,,pdf
+2026-09-11,Câmbio,mensal,2026-11,0,5.2,,,,,109,pdf
+2026-09-11,Câmbio,mensal,2026-11,1,5.19,,,,,,pdf
+2026-09-11,DLSP,anual,2026,0,70,,,,,57,pdf
+2026-09-11,DLSP,anual,2026,1,70,,,,,45,pdf
+2026-09-11,DLSP,anual,2027,0,73.7,,,,,56,pdf
+2026-09-11,DLSP,anual,2027,1,73.8,,,,,44,pdf
+2026-09-11,DLSP,anual,2028,0,76.43,,,,,51,pdf
+2026-09-11,DLSP,anual,2029,0,79.05,,,,,48,pdf
+2026-09-11,IGP-M,anual,2026,0,4.54,,,,,67,pdf
+2026-09-11,IGP-M,anual,2026,1,4.83,,,,,47,pdf
+2026-09-11,IGP-M,anual,2027,0,4.11,,,,,64,pdf
+2026-09-11,IGP-M,anual,2027,1,4.1,,,,,44,pdf
+2026-09-11,IGP-M,anual,2028,0,3.92,,,,,52,pdf
+2026-09-11,IGP-M,anual,2029,0,3.81,,,,,48,pdf
+2026-09-11,IGP-M,mensal,2026-09,0,0.66,,,,,66,pdf
+2026-09-11,IGP-M,mensal,2026-09,1,1.04,,,,,,pdf
+2026-09-11,IGP-M,mensal,2026-10,0,0.59,,,,,66,pdf
+2026-09-11,IGP-M,mensal,2026-10,1,0.61,,,,,,pdf
+2026-09-11,IGP-M,mensal,2026-11,0,0.57,,,,,66,pdf
+2026-09-11,IGP-M,mensal,2026-11,1,0.57,,,,,,pdf
+2026-09-11,IGP-M,mensal,infl12m,0,5.01,,,,,62,pdf
+2026-09-11,IGP-M,mensal,infl12m,1,5.11,,,,,,pdf
+2026-09-11,IPCA,anual,2026,0,4.9,,,,,147,pdf
+2026-09-11,IPCA,anual,2026,1,4.95,,,,,111,pdf
+2026-09-11,IPCA,anual,2027,0,4.3,,,,,147,pdf
+2026-09-11,IPCA,anual,2027,1,4.31,,,,,111,pdf
+2026-09-11,IPCA,anual,2028,0,3.8,,,,,117,pdf
+2026-09-11,IPCA,anual,2029,0,3.5,,,,,110,pdf
+2026-09-11,IPCA,mensal,2026-09,0,0.5,,,,,142,pdf
+2026-09-11,IPCA,mensal,2026-09,1,0.5,,,,,,pdf
+2026-09-11,IPCA,mensal,2026-10,0,0.33,,,,,142,pdf
+2026-09-11,IPCA,mensal,2026-10,1,0.34,,,,,,pdf
+2026-09-11,IPCA,mensal,2026-11,0,0.34,,,,,141,pdf
+2026-09-11,IPCA,mensal,2026-11,1,0.35,,,,,,pdf
+2026-09-11,IPCA,mensal,infl12m,0,4.65,,,,,135,pdf
+2026-09-11,IPCA,mensal,infl12m,1,4.7,,,,,,pdf
+2026-09-11,IPCA Administrados,anual,2026,0,4.61,,,,,96,pdf
+2026-09-11,IPCA Administrados,anual,2026,1,4.6,,,,,75,pdf
+2026-09-11,IPCA Administrados,anual,2027,0,3.85,,,,,94,pdf
+2026-09-11,IPCA Administrados,anual,2027,1,3.89,,,,,74,pdf
+2026-09-11,IPCA Administrados,anual,2028,0,3.61,,,,,64,pdf
+2026-09-11,IPCA Administrados,anual,2029,0,3.5,,,,,60,pdf
+2026-09-11,Investimento direto no país,anual,2026,0,80,,,,,40,pdf
+2026-09-11,Investimento direto no país,anual,2026,1,80,,,,,25,pdf
+2026-09-11,Investimento direto no país,anual,2027,0,79.25,,,,,40,pdf
+2026-09-11,Investimento direto no país,anual,2027,1,79,,,,,25,pdf
+2026-09-11,Investimento direto no país,anual,2028,0,80,,,,,32,pdf
+2026-09-11,Investimento direto no país,anual,2029,0,80,,,,,29,pdf
+2026-09-11,PIB,anual,2026,0,1.89,,,,,112,pdf
+2026-09-11,PIB,anual,2026,1,1.86,,,,,75,pdf
+2026-09-11,PIB,anual,2027,0,1.45,,,,,111,pdf
+2026-09-11,PIB,anual,2027,1,1.33,,,,,75,pdf
+2026-09-11,PIB,anual,2028,0,1.87,,,,,81,pdf
+2026-09-11,PIB,anual,2029,0,2,,,,,75,pdf
+2026-09-11,Resultado nominal,anual,2026,0,-8.81,,,,,57,pdf
+2026-09-11,Resultado nominal,anual,2026,1,-8.81,,,,,43,pdf
+2026-09-11,Resultado nominal,anual,2027,0,-8.5,,,,,56,pdf
+2026-09-11,Resultado nominal,anual,2027,1,-8.5,,,,,42,pdf
+2026-09-11,Resultado nominal,anual,2028,0,-7.89,,,,,49,pdf
+2026-09-11,Resultado nominal,anual,2029,0,-7.39,,,,,45,pdf
+2026-09-11,Resultado primário,anual,2026,0,-0.45,,,,,62,pdf
+2026-09-11,Resultado primário,anual,2026,1,-0.4,,,,,46,pdf
+2026-09-11,Resultado primário,anual,2027,0,-0.4,,,,,61,pdf
+2026-09-11,Resultado primário,anual,2027,1,-0.38,,,,,45,pdf
+2026-09-11,Resultado primário,anual,2028,0,-0.22,,,,,55,pdf
+2026-09-11,Resultado primário,anual,2029,0,-0.15,,,,,51,pdf
+2026-09-11,Selic,anual,2026,0,13.75,,,,,143,pdf
+2026-09-11,Selic,anual,2026,1,13.56,,,,,98,pdf
+2026-09-11,Selic,anual,2027,0,12,,,,,142,pdf
+2026-09-11,Selic,anual,2027,1,12,,,,,97,pdf
+2026-09-11,Selic,anual,2028,0,10.5,,,,,119,pdf
+2026-09-11,Selic,anual,2029,0,10,,,,,110,pdf
+2026-09-11,Selic,mensal,2026-09,0,13.75,,,,,142,pdf
+2026-09-11,Selic,mensal,2026-09,1,13.75,,,,,,pdf
+2026-09-11,Selic,mensal,2026-11,0,13.75,,,,,142,pdf
+2026-09-11,Selic,mensal,2026-11,1,13.75,,,,,,pdf
