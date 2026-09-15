@@ -30,6 +30,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -216,6 +217,40 @@ def _filtro(indicadores: Sequence[str], desde: date | None, ate: date | None) ->
     return " and ".join(partes)
 
 
+def montar_url(endpoint: str, params: dict[str, Any]) -> str:
+    """Monta a URL da consulta codificando espaço como ``%20``, nunca como ``+``.
+
+    Por que não usar ``requests.get(url, params=...)``
+    --------------------------------------------------
+    O ``requests`` monta a query string com ``urlencode``/``quote_plus``, que
+    é a codificação de formulário HTML: **espaço vira ``+``**. Para quase todo
+    servidor isso é equivalente a ``%20``. O OData do Olinda é a exceção: ele
+    lê o ``+`` **literalmente**, como se fizesse parte do texto da expressão.
+
+    Verificado contra o serviço real em 15/09/2026, mesmo endpoint, mudando só
+    a codificação do espaço::
+
+        $orderby=Data+asc   → HTTP 400 "'$orderby' has the not-allowed value 'Data+asc'"
+        $filter=Indicador+eq+'IPCA'+and+Data+ge+'2026-09-01'
+                            → HTTP 400 "The types 'Edm.Boolean' and 'Edm.String'
+                                        are not compatible"
+        (com os 12 indicadores)
+                            → HTTP 400 "The URI is malformed."
+        as mesmas três com %20
+                            → HTTP 200, 10.000 registros
+
+    Custo real do defeito: toda chamada à API falhava com 400, o pipeline caía
+    na reserva (PDF) com um WARNING e publicava um histórico sem dispersão,
+    sem desvio-padrão e sem trajetória — reportando sucesso. A fonte primária
+    nunca funcionou em produção.
+
+    ``safe=""`` é deliberado: sem ele, ``quote`` preservaria ``/`` — inofensivo
+    aqui, mas a regra "codifique tudo que não for alfanumérico" é mais fácil de
+    manter correta do que uma lista de exceções.
+    """
+    return f"{BASE_URL}/{endpoint}?{urlencode(params, quote_via=quote, safe='')}"
+
+
 def consultar(
     endpoint: str,
     *,
@@ -241,9 +276,10 @@ def consultar(
         if filtro:
             params["$filter"] = filtro
 
-        url = f"{BASE_URL}/{endpoint}"
+        # URL montada aqui, não delegada ao `params=` do requests: ver montar_url.
+        url = montar_url(endpoint, params)
         try:
-            resposta = http.get(url, params=params, headers=_HEADERS, timeout=_TIMEOUT)
+            resposta = http.get(url, headers=_HEADERS, timeout=_TIMEOUT)
         except requests.RequestException as exc:
             raise ApiExpectativasError(f"Falha de rede ao consultar {endpoint}: {exc}") from exc
 
