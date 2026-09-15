@@ -1,0 +1,67 @@
+name: Vigia do pipeline
+
+# Por que este workflow existe
+# ----------------------------
+# Entre 31/07/2026 e 11/09/2026 o repositório continuou baixando PDFs toda
+# segunda-feira e não publicou um único resumo. Seis semanas. Nenhum alerta
+# disparou, porque o único alerta configurado cobria a falha do **download** —
+# e o download estava funcionando.
+#
+# O vigia verifica o que interessa: o boletim está sendo *entregue*? Roda todo
+# dia e avisa quando qualquer etapa da cadeia para, mesmo que nenhum workflow
+# tenha falhado.
+
+on:
+  schedule:
+    - cron: "0 15 * * *"   # 12h BRT, diariamente
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Diagnóstico
+        id: diagnostico
+        run: |
+          set +e
+          python -m focus verificar > relatorio.txt 2>&1
+          codigo=$?
+          cat relatorio.txt
+          {
+            echo "relatorio<<FIM"
+            cat relatorio.txt
+            echo "FIM"
+          } >> "$GITHUB_OUTPUT"
+          exit $codigo
+
+      - name: Avisar por e-mail
+        if: failure()
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.FOCUS_SMTP_USER }}
+          password: ${{ secrets.FOCUS_SMTP_APP_PASSWORD }}
+          to: ${{ secrets.FOCUS_EMAIL_DEST }}
+          from: Boletim Focus <${{ secrets.FOCUS_SMTP_USER }}>
+          subject: "🔴 Pipeline do Focus parou de entregar"
+          body: |
+            O diagnóstico diário encontrou problemas:
+
+            ${{ steps.diagnostico.outputs.relatorio }}
+
+            Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
