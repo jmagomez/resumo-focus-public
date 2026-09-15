@@ -1,5 +1,21 @@
 # Dependências de runtime do pipeline.
 # Ferramentas de teste e lint ficam em requirements-dev.txt — a versão anterior
 # misturava pytest e streamlit aqui, inflando o ambiente de produção.
+
+# O próprio pacote, em modo editável.
+#
+# NÃO remova esta linha. O pacote vive em src/ (layout src), então
+# `python -m focus ...` só funciona se ele estiver instalado. Os workflows de
+# runtime — focus-semanal, focus-vigia e focus-enviar — fazem
+# `pip install -r requirements.txt` e em seguida chamam `python -m focus`.
+# Sem esta linha, os três morrem com "No module named focus".
+#
+# Os testes não pegavam isso: o pytest.ini define `pythonpath = src tests`,
+# então o pytest importa o pacote sem instalá-lo. O defeito só apareceu na
+# primeira execução real do focus-semanal.
+-e .
+
+# As dependências abaixo também estão declaradas no pyproject.toml; ficam aqui
+# para quem instala sem passar pelo build do pacote.
 requests>=2.32,<3
 pdfplumber>=0.11,<0.12
