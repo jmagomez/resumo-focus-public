@@ -4,6 +4,17 @@ name: Publicar dashboard
 # serve pelo GitHub Pages; quem o gera é a coleta semanal.
 
 on:
+  # Gatilho principal. O `push` abaixo NÃO cobre o caso real: quem escreve
+  # docs/index.html é a "Coleta semanal do Focus", que commita com o
+  # GITHUB_TOKEN padrão -- e o GitHub, para evitar recursão, não dispara
+  # workflows a partir de eventos gerados por esse token. Efeito observado:
+  # este workflow ficou com ZERO execuções enquanto o dashboard era commitado
+  # semana após semana, e o site respondia 404. `workflow_run` é imune a essa
+  # regra por ser disparado pela CONCLUSÃO do outro workflow, não pelo push.
+  workflow_run:
+    workflows: ["Coleta semanal do Focus"]
+    types: [completed]
+  # Mantido para o caso de alguém editar docs/ com um push próprio.
   push:
     branches: [main]
     paths: ["docs/**"]
@@ -21,6 +32,11 @@ concurrency:
 jobs:
   publicar:
     runs-on: ubuntu-latest
+    # Coleta que falhou não publica: republicar o dashboard da semana passada
+    # como se fosse o desta seria pior do que não publicar nada.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
