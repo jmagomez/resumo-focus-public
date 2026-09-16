@@ -180,43 +180,56 @@ def cmd_verificar(args: argparse.Namespace) -> int:
     Existe porque a falha real do projeto foi silenciosa: o download continuou
     rodando por seis semanas enquanto nenhum resumo era publicado, e o único
     alerta configurado cobria apenas a etapa de download.
+
+    Contrato do relatório: cada assunto verificado produz **um** veredito.
+    Um item que reprovou nunca aparece também como ``[ok]`` — quem lê o
+    e-mail do vigia precisa poder contar os ``[ok]`` e confiar na conta.
     """
     hoje = args.hoje or date.today()
     problemas: list[str] = []
     avisos: list[str] = []
+    aprovados: list[str] = []
 
     txt = _txt_mais_recente()
     if txt is None:
         problemas.append("Nenhum .txt em data/ — o workflow de download não rodou.")
     else:
+        locais: list[str] = []
         data_txt = _data_do_nome(txt)
         if data_txt is None:
-            problemas.append(f"Nome de arquivo fora do padrão: {txt.name}")
+            locais.append(f"Nome de arquivo fora do padrão: {txt.name}")
         else:
             idade = (hoje - data_txt).days
             if idade > IDADE_MAXIMA_DIAS:
-                problemas.append(
+                locais.append(
                     f"Último boletim extraído é de {data_txt} ({idade} dias). "
                     "O download pode estar quebrado."
                 )
         try:
             boletim = parsear_arquivo(txt)
-            print(
-                f"[ok] Parser: {txt.name} → anual {boletim.anual.periodos}, "
+            resumo_parser = (
+                f"Parser: {txt.name} → anual {boletim.anual.periodos}, "
                 f"mensal {boletim.mensal.periodos}"
             )
         except LayoutDesconhecidoError as exc:
-            problemas.append(f"Parser falhou em {txt.name}: {exc}")
+            locais.append(f"Parser falhou em {txt.name}: {exc}")
+            resumo_parser = None
+
+        if locais:
+            problemas.extend(locais)
+        elif resumo_parser:
+            aprovados.append(resumo_parser)
 
     observacoes = store.carregar(args.historico)
     if not observacoes:
         problemas.append("Histórico vazio — rode `python -m focus sincronizar`.")
     else:
+        locais = []
         ultima = an.ultima_data(observacoes) or ""
         idade_hist = (hoje - datetime.strptime(ultima, "%Y-%m-%d").date()).days
-        print(f"[ok] Histórico: {len(observacoes)} observações, última em {ultima}")
+        resumo_hist = f"Histórico: {len(observacoes)} observações, última em {ultima}"
         if idade_hist > IDADE_MAXIMA_DIAS:
-            problemas.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
+            locais.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
         # Saúde da FONTE, não só da entrega.
         #
         # Este bloco existe por causa de uma execução real: o focus-semanal
@@ -234,7 +247,7 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         do_pdf = len(observacoes) - da_api
 
         if da_api == 0:
-            problemas.append(
+            locais.append(
                 "Nenhuma observação veio da API de Expectativas — a fonte "
                 "primária não entregou nada e o histórico está inteiro na "
                 "reserva (PDF), sem dispersão. Rode "
@@ -250,11 +263,16 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         # amplitude saem vazias — o painel abre e não diz nada.
         datas = an.datas_disponiveis(observacoes)
         if len(datas) < 2:
-            problemas.append(
+            locais.append(
                 f"Histórico com {len(datas)} data(s) apenas. Sem ao menos duas "
                 "edições não há revisão, trajetória nem amplitude: o dashboard "
                 "sai vazio mesmo com o pipeline reportando sucesso."
             )
+
+        if locais:
+            problemas.extend(locais)
+        else:
+            aprovados.append(resumo_hist)
 
     htmls = sorted(PASTA_SAIDA.glob("focus_*.html"), reverse=True)
     if not htmls:
@@ -263,15 +281,24 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         data_html = _data_do_nome(htmls[0])
         if data_html is not None:
             idade = (hoje - data_html).days
-            print(f"[ok] Último resumo publicado: {htmls[0].name} ({idade} dias)")
             if idade > IDADE_MAXIMA_DIAS:
                 problemas.append(
                     f"Último resumo publicado é de {data_html} ({idade} dias). "
                     "O pipeline baixa dados mas não está entregando o boletim."
                 )
+            else:
+                aprovados.append(f"Último resumo publicado: {htmls[0].name} ({idade} dias)")
 
+    for aprovado in aprovados:
+        print(f"[ok] {aprovado}")
     for aviso in avisos:
         print(f"[aviso] {aviso}")
+
+    # O vigia manda este relatório por e-mail com `python -m focus verificar
+    # > relatorio.txt 2>&1`. stderr não tem buffer e stdout tem: sem o flush,
+    # as linhas [FALHA] chegavam ANTES das [ok] no arquivo, e o e-mail abria
+    # pela conclusão, com a evidência embaixo e fora de ordem.
+    sys.stdout.flush()
     for problema in problemas:
         print(f"[FALHA] {problema}", file=sys.stderr)
 
