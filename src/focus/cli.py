@@ -137,22 +137,40 @@ def cmd_email(args: argparse.Namespace) -> int:
     data = an.ultima_data(observacoes)
     assert data is not None
 
+    # A prosa é obrigatória para ENVIAR e dispensável para o --dry-run.
+    #
+    # Não é conveniência: é o que torna a cadeia possível. O agente escreve a
+    # prosa lendo os números desta saída — CLAUDE.md diz, literalmente, que
+    # todo valor citado tem de aparecer em `email --dry-run`. Enquanto o
+    # --dry-run exigia a prosa para rodar, o agente precisava do arquivo que
+    # ele ainda ia escrever, e a etapa era impossível de cumprir. Foi assim
+    # que o elo do meio nunca saiu do papel e o pipeline passou seis semanas
+    # coletando sem publicar.
     caminho_prosa = args.prosa
     if caminho_prosa is None:
         candidatos = sorted(PASTA_SAIDA.glob("focus_*.md"), reverse=True)
-        if not candidatos:
-            print(
-                "Nenhuma prosa em output/focus/*.md. O agente de resumo precisa "
-                "rodar antes do envio.",
-                file=sys.stderr,
-            )
-            return 1
-        caminho_prosa = candidatos[0]
+        caminho_prosa = candidatos[0] if candidatos else None
 
-    prosa = report.carregar_prosa(caminho_prosa)
-    if not prosa.resumo:
-        print(f"ERRO: {caminho_prosa} não contém resumo em prosa.", file=sys.stderr)
+    if caminho_prosa is None:
+        prosa = report.Prosa(resumo="", revisoes=[])
+    else:
+        prosa = report.carregar_prosa(caminho_prosa)
+
+    if not prosa.resumo and not args.dry_run:
+        origem = caminho_prosa or "output/focus/*.md"
+        print(
+            f"ERRO: sem prosa da semana ({origem}). O agente de resumo precisa "
+            "rodar antes do envio — veja `.claude/commands/gerar-resumo.md`.",
+            file=sys.stderr,
+        )
         return 1
+
+    if not prosa.resumo:
+        print(
+            "AVISO: nenhuma prosa encontrada. Mostrando só os números, que é o "
+            "que o agente usa para escrevê-la.",
+            file=sys.stderr,
+        )
 
     revs = an.revisoes(observacoes, data=data)
     html = report.construir(revs, prosa, data=data, url_dashboard=args.url_dashboard)

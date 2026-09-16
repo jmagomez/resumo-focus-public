@@ -1,14 +1,20 @@
 name: Enviar resumo do Focus
 
-# Dispara quando o agente publica a prosa da semana em output/focus/*.md.
-# O HTML do e-mail é montado pelo código a partir do histórico já validado —
+# Dispara quando o workflow "Resumo do Focus" termina bem -- não por push.
+#
+# A versão anterior escutava `push` em output/focus/focus_*.md, e isso nunca
+# poderia funcionar por dois motivos somados: nenhum .md jamais existiu neste
+# repositório (os boletins históricos eram .html, commitados à mão), e agora
+# que um workflow escreve o .md, o push vem do GITHUB_TOKEN padrão -- que,
+# por desenho do GitHub, não dispara outros workflows.
+#
+# O HTML do e-mail é montado pelo código a partir do histórico já validado --
 # o agente escreve texto, nunca tabela.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "output/focus/focus_*.md"
+  workflow_run:
+    workflows: ["Resumo do Focus"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +22,10 @@ permissions:
 
 jobs:
   enviar:
+    # Sem prosa nova não há boletim novo para mandar.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
