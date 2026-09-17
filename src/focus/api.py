@@ -14,13 +14,23 @@ Usar a API como fonte primária elimina de uma vez a fragilidade de parsing
 posicional, a defasagem de rótulo e a perda de informação. O PDF continua sendo
 baixado e arquivado — serve de prova documental e de verificação cruzada.
 
+Três endpoints
+--------------
+``ExpectativasMercadoAnuais``      projeções por ano-calendário
+``ExpectativaMercadoMensais``      projeções por mês de referência
+``ExpectativasMercadoInflacao12Meses``
+                                   inflação acumulada nos próximos 12 meses
+
+O terceiro tem contrato próprio: não traz ``DataReferencia`` e distingue as
+observações por uma coluna ``Suavizada`` (``S``/``N``). Ver `inflacao_12_meses`.
+
 Contrato com o serviço
 ----------------------
 Os nomes de campo do OData do BCB são normalizados aqui (``Mediana`` →
 ``mediana``, ``numeroRespondentes`` → ``n_respondentes`` etc.) de forma
-tolerante a maiúsculas/minúsculas. O teste marcado ``network`` em
-``tests/test_api.py`` verifica o contrato contra o serviço real no CI — se o
-BCB renomear um campo, a falha aparece lá, não em produção.
+tolerante a maiúsculas/minúsculas. Os testes marcados ``network`` verificam o
+contrato contra o serviço real no CI — se o BCB renomear um campo, a falha
+aparece lá, não em produção.
 """
 
 from __future__ import annotations
@@ -41,6 +51,34 @@ BASE_URL = "https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odat
 ENDPOINT_ANUAL = "ExpectativasMercadoAnuais"
 ENDPOINT_MENSAL = "ExpectativaMercadoMensais"
 ENDPOINT_INFLACAO_12M = "ExpectativasMercadoInflacao12Meses"
+
+#: Chave com que a inflação acumulada em 12 meses entra no histórico.
+#:
+#: É **a mesma** que o parser do PDF produz, de propósito. Como `store` dá
+#: precedência à API sobre o PDF na mesma chave, a linha da API substitui a do
+#: PDF e traz o que o PDF não tem: desvio-padrão, mínimo, máximo e série
+#: histórica. Mudar esta constante sem mudar o parser cria duas representações
+#: do mesmo número, e o dashboard passaria a mostrar as duas.
+HORIZONTE_12M = "mensal"
+REFERENCIA_12M = "infl12m"
+
+#: Indicadores que o endpoint de 12 meses cobre e que o boletim publica.
+INDICADORES_12M: tuple[str, ...] = ("IPCA", "IGP-M")
+
+#: O endpoint devolve duas variantes por (indicador, data, base): ``S``
+#: (suavizada) e ``N``. O quadro do Focus — e o número que o texto do boletim
+#: cita — é a **suavizada**.
+#:
+#: Verificado contra a edição de 11/09/2026, onde as duas quase coincidem na
+#: base de 30 dias e só a base de 5 dias úteis desempata::
+#:
+#:     PDF, IPCA 12m, 5 dias úteis ....... 4,70
+#:     API, Suavizada="S" ................ 4,6986  → 4,70  ✓
+#:     API, Suavizada="N" ................ 4,7103  → 4,71  ✗
+#:
+#: Trocar para ``"N"`` publicaria outra série sob o mesmo rótulo, sem que nada
+#: falhasse — o tipo de erro que só aparece quando alguém confere na mão.
+SUAVIZADA = "S"
 
 #: ``baseCalculo`` na API do BCB.
 BASE_30_DIAS = 0
@@ -164,7 +202,19 @@ def _normalizar_referencia(bruto: Any, horizonte: str) -> str:
     return texto
 
 
-def _para_expectativa(registro: dict[str, Any], horizonte: str) -> Expectativa:
+def _para_expectativa(
+    registro: dict[str, Any],
+    horizonte: str,
+    *,
+    referencia_fixa: str | None = None,
+) -> Expectativa:
+    """Converte um registro do OData.
+
+    ``referencia_fixa`` existe para o endpoint de inflação em 12 meses, que
+    **não tem** ``DataReferencia``: o período é sempre "os próximos 12 meses",
+    e o que varia é a coluna ``Suavizada``. Nesse caso a referência vem de
+    fora e deixa de ser campo obrigatório da resposta.
+    """
     achatado = {str(k).lower(): v for k, v in registro.items()}
 
     def pegar(campo: str) -> Any:
@@ -173,7 +223,12 @@ def _para_expectativa(registro: dict[str, Any], horizonte: str) -> Expectativa:
                 return achatado[alias]
         return None
 
-    faltando = [c for c in CAMPOS_OBRIGATORIOS if pegar(c) is None]
+    obrigatorios = (
+        CAMPOS_OBRIGATORIOS
+        if referencia_fixa is None
+        else tuple(c for c in CAMPOS_OBRIGATORIOS if c != "referencia")
+    )
+    faltando = [c for c in obrigatorios if pegar(c) is None]
     if faltando:
         raise ApiExpectativasError(
             "Resposta da API sem o(s) campo(s) obrigatório(s) "
@@ -186,7 +241,11 @@ def _para_expectativa(registro: dict[str, Any], horizonte: str) -> Expectativa:
         indicador=NOME_CURTO.get(indicador, indicador),
         detalhe=(str(pegar("detalhe")).strip() or None) if pegar("detalhe") else None,
         data=str(pegar("data")).strip()[:10],
-        referencia=_normalizar_referencia(pegar("referencia"), horizonte),
+        referencia=(
+            referencia_fixa
+            if referencia_fixa is not None
+            else _normalizar_referencia(pegar("referencia"), horizonte)
+        ),
         base_calculo=_inteiro(pegar("base_calculo")) or 0,
         mediana=_numero(pegar("mediana")),
         media=_numero(pegar("media")),
@@ -205,7 +264,12 @@ def _aspas(valor: str) -> str:
     return "'" + valor.replace("'", "''") + "'"
 
 
-def _filtro(indicadores: Sequence[str], desde: date | None, ate: date | None) -> str:
+def _filtro(
+    indicadores: Sequence[str],
+    desde: date | None,
+    ate: date | None,
+    extras: Sequence[str] = (),
+) -> str:
     partes: list[str] = []
     if indicadores:
         alternativas = " or ".join(f"Indicador eq {_aspas(i)}" for i in indicadores)
@@ -214,6 +278,7 @@ def _filtro(indicadores: Sequence[str], desde: date | None, ate: date | None) ->
         partes.append(f"Data ge {_aspas(desde.isoformat())}")
     if ate:
         partes.append(f"Data le {_aspas(ate.isoformat())}")
+    partes.extend(extras)
     return " and ".join(partes)
 
 
@@ -259,10 +324,12 @@ def consultar(
     desde: date | None = None,
     ate: date | None = None,
     session: requests.Session | None = None,
+    filtros_extra: Sequence[str] = (),
+    referencia_fixa: str | None = None,
 ) -> list[Expectativa]:
     """Consulta um endpoint OData de Expectativas, paginando até o fim."""
     http = session or requests
-    filtro = _filtro(indicadores, desde, ate)
+    filtro = _filtro(indicadores, desde, ate, filtros_extra)
     resultados: list[Expectativa] = []
     skip = 0
 
@@ -302,7 +369,9 @@ def consultar(
                 f"Resposta de {endpoint} sem a chave 'value'. Chaves: {sorted(corpo)}"
             )
 
-        resultados.extend(_para_expectativa(r, horizonte) for r in registros)
+        resultados.extend(
+            _para_expectativa(r, horizonte, referencia_fixa=referencia_fixa) for r in registros
+        )
 
         if len(registros) < _PAGINA:
             break
@@ -348,12 +417,39 @@ def expectativas_mensais(
     )
 
 
+def inflacao_12_meses(
+    *,
+    indicadores: Sequence[str] = INDICADORES_12M,
+    desde: date | None = None,
+    ate: date | None = None,
+    session: requests.Session | None = None,
+) -> list[Expectativa]:
+    """Inflação acumulada nos próximos 12 meses, variante suavizada.
+
+    É o número que a meta contínua avalia — centro de 3,00% com banda de ±1,5
+    p.p. sobre o acumulado em doze meses — e era o único do boletim que não
+    tinha série no histórico: vinha só do PDF, uma linha por semana, sem
+    dispersão e sem passado. O endpoint já estava declarado aqui desde a v2 e
+    nunca era consultado.
+    """
+    return consultar(
+        ENDPOINT_INFLACAO_12M,
+        horizonte=HORIZONTE_12M,
+        indicadores=indicadores,
+        desde=desde,
+        ate=ate,
+        session=session,
+        filtros_extra=[f"Suavizada eq {_aspas(SUAVIZADA)}"],
+        referencia_fixa=REFERENCIA_12M,
+    )
+
+
 def sincronizar(
     *,
     desde: date | None = None,
     session: requests.Session | None = None,
 ) -> list[Expectativa]:
-    """Baixa o quadro anual e o mensal em uma chamada só.
+    """Baixa os três quadros em uma chamada só: anual, mensal e 12 meses.
 
     Sem ``desde``, traz os últimos dois anos — janela suficiente para todas as
     métricas de revisão do dashboard sem puxar a série inteira a cada execução.
@@ -361,6 +457,7 @@ def sincronizar(
     desde = desde or (date.today() - timedelta(days=730))
     registros = expectativas_anuais(desde=desde, session=session)
     registros += expectativas_mensais(desde=desde, session=session)
+    registros += inflacao_12_meses(desde=desde, session=session)
     return registros
 
 
