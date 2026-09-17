@@ -1,0 +1,92 @@
+name: Resumo do Focus
+
+# O elo do meio da cadeia de publicação: coleta → ESTE → envio.
+#
+# Ele não existia. O focus-enviar esperava um output/focus/focus_*.md que
+# nenhum workflow escrevia e que nunca foi commitado neste repositório --
+# `git log --all --name-only -- output/` lista só .gitkeep e sete .html.
+# Como `python -m focus email` exige esse arquivo, o envio nunca rodou
+# sozinho: os boletins até 31/07/2026 foram montados à mão. Depois disso,
+# silêncio -- o pipeline seguiu coletando e parou de publicar.
+#
+# Dispara por `workflow_run` e não por `push` porque a coleta commita com o
+# GITHUB_TOKEN padrão, e o GitHub não dispara workflows a partir de eventos
+# gerados por esse token.
+
+on:
+  workflow_run:
+    workflows: ["Coleta semanal do Focus"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: focus-resumo
+  cancel-in-progress: false
+
+jobs:
+  escrever:
+    # Coleta que falhou não tem números novos para resumir.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Falha cedo e com mensagem clara, em vez de quebrar dentro do passo
+      # do agente com um erro de autenticação.
+      - name: Verificar o secret ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Secret ANTHROPIC_API_KEY ausente. Configure em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Instalar o Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # --dangerously-skip-permissions e o modo headless: nao ha ninguem para
+      # aprovar prompt. O raio de acao e o checkout efemero deste runner, com
+      # um GITHUB_TOKEN de escopo unico; o comando em .claude/commands/ define
+      # a tarefa e proibe inventar numero.
+      - name: Escrever a prosa da semana
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: claude -p "/gerar-resumo" --dangerously-skip-permissions
+
+      # Sem esta checagem, um agente que não escrevesse nada deixaria o job
+      # verde e a semana sem boletim -- exatamente o modo de falha que este
+      # repositório já viveu por seis semanas sem que nada reclamasse.
+      - name: Exigir que a prosa exista
+        id: prosa
+        run: |
+          data="$(ls data/focus_*.txt | sort | tail -1 | sed 's/.*focus_//; s/\.txt$//')"
+          arquivo="output/focus/focus_${data}.md"
+          if [ ! -s "$arquivo" ]; then
+            echo "::error::O agente não escreveu $arquivo. Nada a enviar nesta semana."
+            exit 1
+          fi
+          echo "data=$data" >> "$GITHUB_OUTPUT"
+          echo "Prosa da semana ($arquivo):"
+          cat "$arquivo"
+
+      - name: Commitar a prosa
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/focus/
+          git diff --staged --quiet || git commit -m "feat: resumo focus ${{ steps.prosa.outputs.data }}"
+          git push
