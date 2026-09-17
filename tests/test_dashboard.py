@@ -175,6 +175,43 @@ def test_verificar_aprova_pipeline_saudavel(tmp_path, monkeypatch, capsys):
     assert codigo == 0
 
 
+def test_verificar_nao_marca_ok_o_que_reprovou(tmp_path, monkeypatch, capsys):
+    """O mesmo fato não pode sair como [ok] e como [FALHA] no mesmo relatório.
+
+    Defeito real, visto no e-mail do vigia de 16/09/2026 (run 35136532569):
+
+        [FALHA] Último resumo publicado é de 2026-07-31 (47 dias). ...
+        [ok] Último resumo publicado: focus_2026-07-31.html (47 dias)
+
+    A linha [ok] era impressa incondicionalmente, antes da checagem de idade.
+    Num relatório cuja razão de existir é que uma falha passou seis semanas
+    despercebida, carimbar [ok] no item quebrado destrói justamente a leitura
+    que ele deveria permitir: contar quantos [ok] há.
+    """
+    dados = tmp_path / "data"
+    saida = tmp_path / "output" / "focus"
+    dados.mkdir(parents=True)
+    saida.mkdir(parents=True)
+    (dados / "focus_2026-09-11.txt").write_text(
+        fixture("focus_bloco_vazio.txt").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (saida / "focus_2026-07-31.html").write_text("<html></html>", encoding="utf-8")
+
+    historico = _historico_saudavel(tmp_path / "hist.csv")
+
+    monkeypatch.setattr("focus.cli.PASTA_DADOS", dados)
+    monkeypatch.setattr("focus.cli.PASTA_SAIDA", saida)
+
+    codigo = main(["verificar", "--historico", str(historico), "--hoje", "2026-09-14"])
+    texto = capsys.readouterr()
+
+    assert codigo == 1
+    assert "não está entregando" in texto.err
+    assert "[ok] Último resumo publicado" not in texto.out, (
+        "A entrega reprovou e ainda assim saiu carimbada como [ok]:\n" + texto.out
+    )
+
+
 def test_verificar_reprova_historico_so_com_pdf(tmp_path, monkeypatch, capsys):
     """A fonte primária não entregou nada — e isso não pode passar em verde.
 

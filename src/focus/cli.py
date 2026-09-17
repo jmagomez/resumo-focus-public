@@ -40,8 +40,18 @@ def _configurar_log(verboso: bool) -> None:
     )
 
 
-def _txt_mais_recente(pasta: Path = PASTA_DADOS) -> Path | None:
-    arquivos = sorted(pasta.glob("focus_*.txt"), reverse=True)
+def _txt_mais_recente(pasta: Path | None = None) -> Path | None:
+    """Último ``.txt`` da pasta de dados.
+
+    ``pasta=None`` resolve ``PASTA_DADOS`` **na chamada**, não na importação.
+    Com o valor amarrado como argumento padrão (``pasta: Path = PASTA_DADOS``),
+    trocar ``focus.cli.PASTA_DADOS`` não tinha efeito nenhum: os testes de
+    diagnóstico apontavam para um ``tmp_path`` e liam, sem saber, a ``data/``
+    real do repositório. Passavam pelo motivo errado — a edição versionada é
+    recente e parseável, então nenhuma checagem de idade chegava a disparar.
+    """
+    alvo = PASTA_DADOS if pasta is None else pasta
+    arquivos = sorted(alvo.glob("focus_*.txt"), reverse=True)
     return arquivos[0] if arquivos else None
 
 
@@ -50,6 +60,24 @@ def _data_do_nome(caminho: Path) -> date | None:
         return datetime.strptime(caminho.stem.split("_", 1)[1], "%Y-%m-%d").date()
     except (IndexError, ValueError):
         return None
+
+
+def _erro(mensagem: str) -> None:
+    """Escreve em stderr, depois de esvaziar o stdout.
+
+    Nos workflows os dois streams caem no mesmo lugar (``> relatorio.txt 2>&1``,
+    ou o log do Actions). ``stdout`` tem buffer e ``stderr`` não, então sem este
+    flush as linhas de erro aparecem **antes** das linhas normais que as
+    precederam — e a ordem muda de uma execução para outra, conforme o buffer
+    enche.
+
+    Dois casos reais: o e-mail do vigia (run 35136532569) chegou com o
+    ``[FALHA]`` no topo e a evidência embaixo; o log do envio (run 35164311085)
+    mostrou ``HTML gravado:`` **depois** do traceback que o interrompeu, o que
+    sugere uma ordem de eventos que não aconteceu.
+    """
+    sys.stdout.flush()
+    print(mensagem, file=sys.stderr)
 
 
 # ── Comandos ──────────────────────────────────────────────────────────────────
@@ -68,10 +96,7 @@ def cmd_extrair(args: argparse.Namespace) -> int:
     if caminho is None:
         pdfs = sorted(PASTA_DADOS.glob("focus_*.pdf"), reverse=True)
         if not pdfs:
-            print(
-                "Nenhum PDF em data/. Rode antes: python -m focus baixar",
-                file=sys.stderr,
-            )
+            _erro("Nenhum PDF em data/. Rode antes: python -m focus baixar")
             return 1
         caminho = pdfs[0]
     print(pdf.extrair_texto(caminho, forcar=args.forcar))
@@ -90,7 +115,7 @@ def cmd_sincronizar(args: argparse.Namespace) -> int:
     except api.ApiExpectativasError as exc:
         log.warning("API de Expectativas indisponível (%s). Usando o PDF como reserva.", exc)
         if args.exigir_api:
-            print(f"ERRO: {exc}", file=sys.stderr)
+            _erro(f"ERRO: {exc}")
             return 2
 
     txt = _txt_mais_recente()
@@ -100,14 +125,11 @@ def cmd_sincronizar(args: argparse.Namespace) -> int:
         except LayoutDesconhecidoError as exc:
             log.error("Falha ao ler %s: %s", txt.name, exc)
             if not novas:
-                print(f"ERRO: {exc}", file=sys.stderr)
+                _erro(f"ERRO: {exc}")
                 return 2
 
     if not novas:
-        print(
-            "ERRO: nem a API nem o PDF forneceram dados. Histórico não alterado.",
-            file=sys.stderr,
-        )
+        _erro("ERRO: nem a API nem o PDF forneceram dados. Histórico não alterado.")
         return 2
 
     resultado = store.mesclar(novas, args.historico)
@@ -118,10 +140,7 @@ def cmd_sincronizar(args: argparse.Namespace) -> int:
 def cmd_dashboard(args: argparse.Namespace) -> int:
     observacoes = store.carregar(args.historico)
     if not observacoes:
-        print(
-            "Histórico vazio. Rode antes: python -m focus sincronizar",
-            file=sys.stderr,
-        )
+        _erro("Histórico vazio. Rode antes: python -m focus sincronizar")
         return 1
     destino = dashboard.construir(observacoes, destino=args.destino)
     print(destino)
@@ -131,7 +150,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 def cmd_email(args: argparse.Namespace) -> int:
     observacoes = store.carregar(args.historico)
     if not observacoes:
-        print("Histórico vazio. Rode antes: python -m focus sincronizar", file=sys.stderr)
+        _erro("Histórico vazio. Rode antes: python -m focus sincronizar")
         return 1
 
     data = an.ultima_data(observacoes)
@@ -158,18 +177,16 @@ def cmd_email(args: argparse.Namespace) -> int:
 
     if not prosa.resumo and not args.dry_run:
         origem = caminho_prosa or "output/focus/*.md"
-        print(
+        _erro(
             f"ERRO: sem prosa da semana ({origem}). O agente de resumo precisa "
-            "rodar antes do envio — veja `.claude/commands/gerar-resumo.md`.",
-            file=sys.stderr,
+            "rodar antes do envio — veja `.claude/commands/gerar-resumo.md`."
         )
         return 1
 
     if not prosa.resumo:
-        print(
+        _erro(
             "AVISO: nenhuma prosa encontrada. Mostrando só os números, que é o "
-            "que o agente usa para escrevê-la.",
-            file=sys.stderr,
+            "que o agente usa para escrevê-la."
         )
 
     revs = an.revisoes(observacoes, data=data)
@@ -198,43 +215,56 @@ def cmd_verificar(args: argparse.Namespace) -> int:
     Existe porque a falha real do projeto foi silenciosa: o download continuou
     rodando por seis semanas enquanto nenhum resumo era publicado, e o único
     alerta configurado cobria apenas a etapa de download.
+
+    Contrato do relatório: cada assunto verificado produz **um** veredito. Um
+    item que reprovou nunca aparece também como ``[ok]`` — quem lê o e-mail do
+    vigia precisa poder contar os ``[ok]`` e confiar na conta.
     """
     hoje = args.hoje or date.today()
     problemas: list[str] = []
     avisos: list[str] = []
+    aprovados: list[str] = []
 
     txt = _txt_mais_recente()
     if txt is None:
         problemas.append("Nenhum .txt em data/ — o workflow de download não rodou.")
     else:
+        locais: list[str] = []
         data_txt = _data_do_nome(txt)
         if data_txt is None:
-            problemas.append(f"Nome de arquivo fora do padrão: {txt.name}")
+            locais.append(f"Nome de arquivo fora do padrão: {txt.name}")
         else:
             idade = (hoje - data_txt).days
             if idade > IDADE_MAXIMA_DIAS:
-                problemas.append(
+                locais.append(
                     f"Último boletim extraído é de {data_txt} ({idade} dias). "
                     "O download pode estar quebrado."
                 )
         try:
             boletim = parsear_arquivo(txt)
-            print(
-                f"[ok] Parser: {txt.name} → anual {boletim.anual.periodos}, "
+            resumo_parser = (
+                f"Parser: {txt.name} → anual {boletim.anual.periodos}, "
                 f"mensal {boletim.mensal.periodos}"
             )
         except LayoutDesconhecidoError as exc:
-            problemas.append(f"Parser falhou em {txt.name}: {exc}")
+            locais.append(f"Parser falhou em {txt.name}: {exc}")
+            resumo_parser = None
+
+        if locais:
+            problemas.extend(locais)
+        elif resumo_parser:
+            aprovados.append(resumo_parser)
 
     observacoes = store.carregar(args.historico)
     if not observacoes:
         problemas.append("Histórico vazio — rode `python -m focus sincronizar`.")
     else:
+        locais = []
         ultima = an.ultima_data(observacoes) or ""
         idade_hist = (hoje - datetime.strptime(ultima, "%Y-%m-%d").date()).days
-        print(f"[ok] Histórico: {len(observacoes)} observações, última em {ultima}")
+        resumo_hist = f"Histórico: {len(observacoes)} observações, última em {ultima}"
         if idade_hist > IDADE_MAXIMA_DIAS:
-            problemas.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
+            locais.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
         # Saúde da FONTE, não só da entrega.
         #
         # Este bloco existe por causa de uma execução real: o focus-semanal
@@ -252,7 +282,7 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         do_pdf = len(observacoes) - da_api
 
         if da_api == 0:
-            problemas.append(
+            locais.append(
                 "Nenhuma observação veio da API de Expectativas — a fonte "
                 "primária não entregou nada e o histórico está inteiro na "
                 "reserva (PDF), sem dispersão. Rode "
@@ -268,11 +298,16 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         # amplitude saem vazias — o painel abre e não diz nada.
         datas = an.datas_disponiveis(observacoes)
         if len(datas) < 2:
-            problemas.append(
+            locais.append(
                 f"Histórico com {len(datas)} data(s) apenas. Sem ao menos duas "
                 "edições não há revisão, trajetória nem amplitude: o dashboard "
                 "sai vazio mesmo com o pipeline reportando sucesso."
             )
+
+        if locais:
+            problemas.extend(locais)
+        else:
+            aprovados.append(resumo_hist)
 
     htmls = sorted(PASTA_SAIDA.glob("focus_*.html"), reverse=True)
     if not htmls:
@@ -281,17 +316,20 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         data_html = _data_do_nome(htmls[0])
         if data_html is not None:
             idade = (hoje - data_html).days
-            print(f"[ok] Último resumo publicado: {htmls[0].name} ({idade} dias)")
             if idade > IDADE_MAXIMA_DIAS:
                 problemas.append(
                     f"Último resumo publicado é de {data_html} ({idade} dias). "
                     "O pipeline baixa dados mas não está entregando o boletim."
                 )
+            else:
+                aprovados.append(f"Último resumo publicado: {htmls[0].name} ({idade} dias)")
 
+    for aprovado in aprovados:
+        print(f"[ok] {aprovado}")
     for aviso in avisos:
         print(f"[aviso] {aviso}")
     for problema in problemas:
-        print(f"[FALHA] {problema}", file=sys.stderr)
+        _erro(f"[FALHA] {problema}")
 
     return 1 if problemas else 0
 
@@ -361,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
         api.ApiExpectativasError,
         mail.CredenciaisAusentesError,
     ) as exc:
-        print(f"ERRO: {exc}", file=sys.stderr)
+        _erro(f"ERRO: {exc}")
         return 2
 
 
