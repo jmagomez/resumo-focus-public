@@ -24,7 +24,9 @@ executivo por e-mail.
   (ex.: `R20260911.pdf` para a edição de 11/09/2026).
 
 ## Convenções
-- Nomes por data de publicação: `focus_AAAA-MM-DD`.
+- Nomes pela **sexta-feira de coleta**, não pela data de publicação:
+  `focus_AAAA-MM-DD`. A edição `focus_2026-09-11` é a que o BCB divulgou na
+  segunda, 14/09.
 - Referência anual: `"2026"`. Referência mensal: `"2026-09"` — a API devolve
   `"09/2026"` e o cliente normaliza. Inflação em 12 meses: `"infl12m"`.
 - Histórico em formato **longo**, chave única
@@ -44,9 +46,16 @@ output/focus/  .md escrito pelo agente e .html efetivamente enviado
 ## Regras de negócio
 
 ### Download
-- Publicação na segunda-feira; em feriado nacional, escorrega para terça ou
-  adiante. O downloader recua dia a dia (até 8 dias) em vez de modelar o
-  calendário de feriados.
+- O Focus é **semanal**: coleta até a sexta, publicação na segunda seguinte —
+  em feriado nacional, escorrega para terça ou adiante. O artefato leva o nome
+  da **sexta de coleta** (`R20260911.pdf` saiu na segunda, 14/09). O downloader
+  recua dia a dia (até 8 dias) em vez de modelar o calendário de feriados.
+- Disso decorre que a edição corrente **envelhece a semana inteira**: tem 3
+  dias na segunda em que sai e chega a 10 na manhã da segunda seguinte, antes
+  da próxima. Nenhum limiar fixo de "dias desde a coleta" funciona — abaixo de
+  10 dispara sozinho, acima de 12 demora duas semanas para notar coleta
+  travada. Quem responde "o dado está atrasado?" é `focus.calendario`, e ele
+  pergunta outra coisa: *é a edição mais recente que já deveria existir?*
 - Só aceita resposta que comece com `%PDF` **e** tenha ao menos 50 KB — o
   portal do BCB às vezes devolve página de erro com HTTP 200.
 
