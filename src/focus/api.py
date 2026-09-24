@@ -84,6 +84,55 @@ SUAVIZADA = "S"
 BASE_30_DIAS = 0
 BASE_5_DIAS_UTEIS = 1
 
+#: Razão mínima média / desvio-padrão para que o CV seja publicável.
+#:
+#: O coeficiente de variação exige escala de razão com média estritamente
+#: positiva. Numa variável que **cruza o zero** o denominador tende a zero e a
+#: razão explode sem que a discordância tenha mudado nada.
+#:
+#: O valor não é arbitrado: é medido. Nas 37.855 observações anuais com média e
+#: desvio-padrão dos últimos dois anos, a razão μ/σ se distribui assim::
+#:
+#:     [0,0 ; 1,0)   2780 obs   Resultado primário (2776), IGP-M (4)
+#:     [1,0 ; 1,5)    198 obs   Resultado primário (163), IGP-M (35)
+#:     [1,5 ; 2,0)     50 obs   IGP-M (50)
+#:     [2,0 ; 2,5)      0 obs   ← vazio
+#:     [2,5 ; 3,0)      8 obs   PIB (8)
+#:     [3,0 ; 3,5)     53 obs   PIB (39), IGP-M (12), Balança comercial (2)
+#:
+#: Os indicadores que cruzam o zero chegam no máximo a 1,26 (resultado
+#: primário); o menor valor entre os que nunca cruzam é 2,93 (PIB). A fronteira
+#: real é a faixa **(1,26 ; 2,93)**, e há uma lacuna sem nenhuma observação
+#: entre 2,0 e 2,5 — qualquer limiar ali dentro classifica igual. 2,0 fica
+#: praticamente no centro da faixa, o que torna a escolha robusta em vez de
+#: discricionária: 1,5 deixaria passar 50 linhas de IGP-M com média perto de
+#: zero; 3,0 começaria a cortar 8 linhas legítimas de PIB.
+#:
+#: ``tests/test_dispersao.py`` guarda essa separação contra o histórico real.
+#: Se ela deixar de valer, o teste falha — e é sinal de que o limiar precisa
+#: ser remedido, não de que o teste está errado.
+RAZAO_MINIMA_PARA_CV = 2.0
+
+
+def coeficiente_variacao(desvio_padrao: float | None, media: float | None) -> float | None:
+    """CV de uma observação, **ou ``None`` fora do domínio da medida**.
+
+    Definição única do projeto. Existiam três cópias desta conta — aqui, em
+    ``analytics.revisoes`` e em ``analytics.Dispersao`` — e só uma delas
+    ganhou a guarda quando o defeito foi corrigido. Cópia de fórmula é como
+    defeito volta: basta alguém ler a errada.
+
+    Devolver ``None`` é a resposta honesta. Não é que a discordância seja
+    desconhecida — o desvio-padrão está ali, na unidade original. É a
+    *normalização* que não se aplica.
+    """
+    if desvio_padrao is None or not media:
+        return None
+    if media <= 0 or media < RAZAO_MINIMA_PARA_CV * desvio_padrao:
+        return None
+    return round(desvio_padrao / media, 4)
+
+
 #: Pares ``(indicador, horizonte)`` que a API de Expectativas **não** serve e
 #: que, por isso, só existem no histórico com origem no PDF.
 #:
@@ -156,21 +205,12 @@ class Expectativa:
 
     @property
     def coeficiente_variacao(self) -> float | None:
-        """Desvio-padrão sobre |média|, **sem guarda de domínio**.
+        """Discordância entre analistas, adimensional — ver `coeficiente_variacao`.
 
-        Medida de discordância entre analistas, adimensional e por isso
-        comparável entre escalas — mas só onde a média é positiva e folgada.
-        Em variável que cruza o zero (resultado primário, conta corrente) o
-        denominador tende a zero e a razão explode sem que a discordância
-        tenha mudado.
-
-        Este é o valor cru da API. Quem apresenta número ao leitor usa
-        ``analytics.Dispersao.coeficiente_variacao``, que aplica a guarda e
-        devolve ``None`` fora do domínio.
+        Devolve ``None`` onde o CV não está definido: média negativa, ou
+        positiva mas próxima demais do zero para sustentar a divisão.
         """
-        if self.desvio_padrao is None or not self.media:
-            return None
-        return round(self.desvio_padrao / abs(self.media), 4)
+        return coeficiente_variacao(self.desvio_padrao, self.media)
 
 
 # ── Normalização de campos ──────────────────────────────────────────────
