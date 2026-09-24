@@ -324,7 +324,25 @@ def _secao_revisoes(revs: Sequence[an.Revisao], data: str) -> str:
     return f'<section class="secao"><h2>Revisões</h2>{"".join(graficos)}{nota}{tabela}</section>'
 
 
-#: Janela dos gráficos de série temporal, em semanas de calendário.
+#: Janela dos gráficos de série temporal, em **semanas de calendário**.
+#:
+#: Dois anos, que é exatamente o que `api.sincronizar` coleta. Encurtar para um
+#: ano foi cogitado por legibilidade e medido antes de ser descartado — os
+#: números dizem que a janela curta destrói informação nos dois gráficos:
+#:
+#: *Meta contínua.* Em 104 semanas a série vai de 3,92% a 5,87% e passa 36
+#: semanas acima do teto da banda, a primeira em 06/12/2024. Em 52 semanas o
+#: máximo cai para 4,65% e sobram 4 semanas acima. A janela curta faria a
+#: expectativa parecer estar furando o teto pela primeira vez, quando na
+#: verdade é uma **volta** — para quem acompanha política monetária, é outra
+#: história.
+#:
+#: *Trajetória.* O IPCA de 2029 só entra na pesquisa em 01/2025: em 52 semanas
+#: sua amplitude é **0,00** — uma reta morta ocupando uma das quatro cores. Em
+#: 104 semanas ela é 0,50.
+#:
+#: A densidade não é problema: são ~105 marcas em 760 px de largura, e é linha,
+#: não marcador.
 JANELA_SEMANAS = 104
 
 
