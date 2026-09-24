@@ -181,3 +181,83 @@ def test_sem_a_serie_a_secao_some_em_vez_de_quebrar(tmp_path):
 
     assert "Meta contínua</h2>" not in pagina
     assert "Trajetória" in pagina, "o resto do painel continua de pé"
+
+
+# ── A janela de dois anos, medida ────────────────────────────────────────
+
+
+def test_janela_curta_apagaria_o_movimento_que_ja_aconteceu():
+    """Por que a janela é de 104 semanas e não de 52.
+
+    Nos dados reais, o IPCA de 2029 tem amplitude **0,00** na janela de um ano
+    e 0,50 na de dois: ele se moveu antes, e desde então está parado. Em 52
+    semanas sai como reta morta ocupando uma das quatro cores do gráfico. A
+    janela curta não é mais legível — é mais pobre.
+
+    Aqui isso é reproduzido: a série se move no primeiro ano e congela no
+    segundo.
+    """
+    obs = []
+    for o in _serie_diaria(520, referencia="2029"):
+        idade = (BASE - date.fromisoformat(o.data)).days
+        valor = 3.6 if idade <= 364 else 3.6 + (idade - 364) / 1000
+        obs.append(
+            store.Observacao(
+                data=o.data,
+                indicador="IPCA",
+                horizonte="anual",
+                referencia="2029",
+                base_calculo=0,
+                mediana=valor,
+                media=valor,
+                desvio_padrao=0.25,
+                n_respondentes=140,
+                fonte=store.FONTE_API,
+            )
+        )
+
+    def amplitude(semanas):
+        p = an.trajetoria(
+            obs, indicador="IPCA", referencia="2029", desde=an.desde_semanas(obs, semanas)
+        )
+        return max(x.valor for x in p) - min(x.valor for x in p)
+
+    assert amplitude(52) == 0.0, "em um ano a série é uma reta — nada a ler"
+    assert amplitude(104) > 0.3, "em dois anos o movimento aparece"
+
+
+def test_a_janela_do_painel_cobre_o_que_a_api_coleta():
+    """104 semanas é exatamente o que `sincronizar` baixa: 730 dias."""
+    from focus.dashboard import JANELA_SEMANAS
+
+    assert JANELA_SEMANAS == 104
+    assert JANELA_SEMANAS * 7 == 728, "dois anos, a mesma janela de --dias 730"
+
+
+def test_a_serie_de_12_meses_cobre_dois_anos(tmp_path):
+    """A leitura que a janela curta esconderia: a furada da banda é uma volta."""
+    obs = _com_12_meses(4.6232)
+    # Uma excursão acima do teto, bem no início da janela de dois anos.
+    antiga = date(2025, 3, 7)
+    obs += [
+        store.Observacao(
+            data=antiga.isoformat(),
+            indicador="IPCA",
+            horizonte=an.HORIZONTE_12M,
+            referencia=an.REFERENCIA_12M,
+            base_calculo=0,
+            mediana=5.87,
+            media=5.87,
+            desvio_padrao=0.5,
+            n_respondentes=130,
+            fonte=store.FONTE_API,
+        )
+    ]
+
+    de_dois_anos = an.serie_12_meses(obs, desde=an.desde_semanas(obs, 104))
+    de_um_ano = an.serie_12_meses(obs, desde=an.desde_semanas(obs, 52))
+
+    assert any(p.valor > 4.5 for p in de_dois_anos), "a excursão anterior tem de aparecer"
+    assert not any(p.data == antiga.isoformat() for p in de_um_ano), (
+        "em um ano ela fica de fora — e a furada de hoje pareceria a primeira"
+    )
