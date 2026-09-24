@@ -244,3 +244,81 @@ def test_linha_do_pdf_fora_da_lista_continua_avisando(tmp_path, monkeypatch, cap
     assert "[aviso]" in texto.out
     assert "IPCA/anual" in texto.out, "o aviso tem de nomear a chave inesperada"
     assert "Selic" not in texto.out, "a linha estrutural não entra na contagem"
+
+
+# ── Uma definição só, e o limiar medido ────────────────────────────────────
+
+
+def test_as_tres_copias_do_cv_viraram_uma():
+    """Havia três: `api.Expectativa`, `analytics.revisoes` e `Dispersao`.
+
+    Só uma ganhou a guarda quando o defeito foi corrigido. Cópia de fórmula é
+    como defeito volta — basta alguém ler a errada. Este teste falha se alguma
+    delas voltar a divergir.
+    """
+    sem_dominio = {"desvio_padrao": 0.5705, "media": 0.0556}  # resultado primário 2030
+    com_dominio = {"desvio_padrao": 0.5762, "media": 4.30}  # IPCA 2030
+
+    for caso, esperado_e_none in ((sem_dominio, True), (com_dominio, False)):
+        da_api = api.Expectativa(
+            indicador="X",
+            detalhe=None,
+            data=DATA,
+            referencia="2030",
+            base_calculo=0,
+            mediana=caso["media"],
+            media=caso["media"],
+            desvio_padrao=caso["desvio_padrao"],
+            minimo=None,
+            maximo=None,
+            n_respondentes=100,
+            horizonte="anual",
+        )
+        da_dispersao = _disp("X", "2030", media=caso["media"], desvio=caso["desvio_padrao"])
+        direto = api.coeficiente_variacao(caso["desvio_padrao"], caso["media"])
+
+        assert (da_api.coeficiente_variacao is None) is esperado_e_none
+        assert da_api.coeficiente_variacao == da_dispersao.coeficiente_variacao == direto
+
+
+def test_revisao_nao_carrega_mais_a_formula_sem_guarda():
+    """Campo morto com fórmula errada é armadilha armada para o próximo leitor."""
+    observacoes = [
+        _obs("Resultado primário", "2030", media=0.0556, desvio=0.5705),
+        _obs("Resultado primário", "2030", media=0.06, desvio=0.57, data="2026-09-11"),
+    ]
+    (r,) = [x for x in an.revisoes(observacoes, data=DATA) if x.indicador == "Resultado primário"]
+
+    assert r.coeficiente_variacao is None, "a revisão publicava CV de 1.026%"
+
+
+def test_o_limiar_separa_o_que_tem_de_separar_no_historico_real():
+    """Canário do limiar, medido contra os dois anos versionados em data/.
+
+    A razão μ/σ separa os indicadores em dois grupos sem sobreposição: os que
+    cruzam o zero chegam no máximo a 1,26 e os que nunca cruzam começam em
+    2,93. Se esta separação deixar de valer, o limiar precisa ser remedido —
+    e é este teste que avisa, não o painel publicando 1.026% de novo.
+    """
+    observacoes = [
+        o
+        for o in store.carregar(store.CAMINHO_PADRAO)
+        if o.horizonte == "anual"
+        and o.base_calculo == 0
+        and o.referencia.isdigit()
+        and o.media is not None
+        and o.desvio_padrao
+    ]
+    if not observacoes:  # pragma: no cover - histórico ausente num checkout raso
+        pytest.skip("histórico real não disponível")
+
+    publica = {
+        o.indicador for o in observacoes if api.coeficiente_variacao(o.desvio_padrao, o.media)
+    }
+    cruzam_o_zero = {"Resultado primário", "Resultado nominal", "Conta corrente"}
+
+    assert not (publica & cruzam_o_zero), (
+        f"indicadores de média que cruza o zero voltaram a publicar CV: {publica & cruzam_o_zero}"
+    )
+    for esperado in ("IPCA", "Selic", "Câmbio", "PIB"):
+        assert esperado in publica, f"{esperado} deixou de publicar CV — limiar apertado demais"
