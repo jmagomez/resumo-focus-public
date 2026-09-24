@@ -83,6 +83,7 @@ header.topo .sub { margin: 0; color: var(--texto-2); font-size: 14px; }
 .delta.neutro { color: var(--texto-3); }
 .faisca { display: block; margin-top: 8px; width: 104px; height: 26px; }
 .nota { margin: 6px 0 0; font-size: 12.5px; color: var(--texto-3); }
+.nota.alerta-texto { color: var(--critico); font-weight: 600; }
 .figura { margin: 0 0 32px; }
 .figura figcaption h3 { margin: 0 0 2px; font-size: 17px; letter-spacing: -.01em; }
 .figura figcaption p { margin: 0 0 10px; color: var(--texto-2); font-size: 13.5px; }
@@ -200,7 +201,7 @@ def _tabela(
     )
 
 
-# ── Seções ────────────────────────────────────────────────────────────────────
+# ── Seções ─────────────────────────────────────────────────────────────────
 
 
 def _cartoes(obs: Sequence[Observacao], data: str, revs: Sequence[an.Revisao]) -> str:
@@ -323,6 +324,97 @@ def _secao_revisoes(revs: Sequence[an.Revisao], data: str) -> str:
     return f'<section class="secao"><h2>Revisões</h2>{"".join(graficos)}{nota}{tabela}</section>'
 
 
+#: Janela dos gráficos de série temporal, em **semanas de calendário**.
+#:
+#: Dois anos, que é exatamente o que `api.sincronizar` coleta. Encurtar para um
+#: ano foi cogitado por legibilidade e medido antes de ser descartado — os
+#: números dizem que a janela curta destrói informação nos dois gráficos:
+#:
+#: *Meta contínua.* Em 104 semanas a série vai de 3,92% a 5,87% e passa 36
+#: semanas acima do teto da banda, a primeira em 06/12/2024. Em 52 semanas o
+#: máximo cai para 4,65% e sobram 4 semanas acima. A janela curta faria a
+#: expectativa parecer estar furando o teto pela primeira vez, quando na
+#: verdade é uma **volta** — para quem acompanha política monetária, é outra
+#: história.
+#:
+#: *Trajetória.* O IPCA de 2029 só entra na pesquisa em 01/2025: em 52 semanas
+#: sua amplitude é **0,00** — uma reta morta ocupando uma das quatro cores. Em
+#: 104 semanas ela é 0,50.
+#:
+#: A densidade não é problema: são ~105 marcas em 760 px de largura, e é linha,
+#: não marcador.
+JANELA_SEMANAS = 104
+
+
+def _secao_meta_continua(obs: Sequence[Observacao], data: str) -> str:
+    """A expectativa de 12 meses contra a banda — o número que a meta avalia.
+
+    Esta seção vem primeiro entre os gráficos porque, desde janeiro de 2025, é
+    ela que o CMN afere: mês a mês, sobre o IPCA acumulado em doze meses. As
+    seções por ano-calendário que vêm depois são úteis, mas nenhuma delas é o
+    número que a meta contínua olha.
+
+    A série estava no histórico desde que o terceiro endpoint foi ligado, com
+    504 pontos e desvio-padrão, e o painel não a desenhava em lugar nenhum.
+    """
+    leitura = an.expectativa_12_meses(obs, data=data)
+    if leitura is None:
+        return ""
+
+    pontos = an.serie_12_meses(obs, desde=an.desde_semanas(obs, JANELA_SEMANAS))
+    if len(pontos) < 2:
+        return ""
+
+    grafico = grafico_linhas(
+        [
+            Serie(
+                nome="IPCA 12 meses", cor=CORES_SERIE[0], pontos=[(p.data, p.valor) for p in pontos]
+            )
+        ],
+        id_grafico="g-meta-12m",
+        titulo="Expectativa de IPCA para os próximos 12 meses",
+        subtitulo=(
+            "Mediana suavizada da pesquisa Focus, uma marca por semana. A faixa é a "
+            f"banda da meta contínua ({num(leitura.piso)}% a {num(leitura.teto)}%) e a "
+            f"linha tracejada, o centro ({num(an.META_INFLACAO)}%). É sobre este "
+            "horizonte — e não sobre o ano-calendário — que a meta é avaliada."
+        ),
+        unidade="%",
+        banda=(leitura.piso, leitura.teto),
+        linha_referencia=(an.META_INFLACAO, "meta"),
+        altura=300,
+        rotulo_x=_rotulo_data,
+    )
+
+    if leitura.dentro_da_banda:
+        veredito = (
+            f"A expectativa está <strong>{esc(leitura.situacao)}</strong>, a "
+            f"{num_sinal(leitura.desvio)} p.p. do centro."
+        )
+        classe = "nota"
+    else:
+        veredito = (
+            f"A expectativa está <strong>{esc(leitura.situacao)}</strong>: "
+            f"{num(leitura.expectativa)}% contra um teto de {num(leitura.teto)}%, "
+            f"um excesso de {num(leitura.excesso)} p.p."
+        )
+        classe = "nota alerta-texto"
+
+    dispersao_txt = (
+        f" Desvio-padrão entre os {leitura.n_respondentes} respondentes: "
+        f"{num(leitura.desvio_padrao)} p.p."
+        if leitura.desvio_padrao is not None and leitura.n_respondentes
+        else ""
+    )
+
+    return (
+        '<section class="secao"><h2>Meta contínua</h2>'
+        f"{grafico}"
+        f'<p class="{classe}">{veredito}{esc(dispersao_txt)}</p>'
+        "</section>"
+    )
+
+
 def _secao_trajetoria(obs: Sequence[Observacao], revs: Sequence[an.Revisao]) -> str:
     anos = sorted(
         {r.referencia for r in revs if r.horizonte == "anual" and r.referencia.isdigit()}
@@ -330,8 +422,13 @@ def _secao_trajetoria(obs: Sequence[Observacao], revs: Sequence[an.Revisao]) -> 
     if not anos:
         return ""
 
-    corte = sorted({o.data for o in obs})[-52:]
-    desde = corte[0] if corte else None
+    # A janela é de CALENDÁRIO, nunca de contagem de datas disponíveis.
+    #
+    # Aqui havia `sorted({o.data for o in obs})[-52:]`, escrito como se o
+    # histórico fosse semanal. Ele é diário: 505 datas em dois anos, das quais
+    # 101 são sextas. O gráfico rotulado como um ano cobria 72 dias corridos —
+    # o projeto baixava 730 dias de história e desenhava 72.
+    desde = an.desde_semanas(obs, JANELA_SEMANAS)
 
     series = [
         Serie(
@@ -339,7 +436,9 @@ def _secao_trajetoria(obs: Sequence[Observacao], revs: Sequence[an.Revisao]) -> 
             cor=CORES_SERIE[i % len(CORES_SERIE)],
             pontos=[
                 (p.data, p.valor)
-                for p in an.trajetoria(obs, indicador="IPCA", referencia=ano, desde=desde)
+                for p in an.amostrar_semanal(
+                    an.trajetoria(obs, indicador="IPCA", referencia=ano, desde=desde)
+                )
             ],
         )
         for i, ano in enumerate(anos)
@@ -353,8 +452,9 @@ def _secao_trajetoria(obs: Sequence[Observacao], revs: Sequence[an.Revisao]) -> 
         id_grafico="g-trajetoria",
         titulo="Trajetória das expectativas de IPCA",
         subtitulo=(
-            "Mediana por ano de referência, edição a edição. A linha tracejada é o "
-            f"centro da meta contínua ({num(an.META_INFLACAO)}%)."
+            f"Mediana por ano de referência, uma marca por semana, {JANELA_SEMANAS // 52} "
+            "anos de história. A linha tracejada é o centro da meta contínua "
+            f"({num(an.META_INFLACAO)}%)."
         ),
         unidade="%",
         linha_referencia=(an.META_INFLACAO, "meta"),
@@ -447,13 +547,36 @@ def _secao_dispersao(obs: Sequence[Observacao], data: str) -> str:
             "desvio-padrão, mínimo e máximo.</p></section>"
         )
 
-    itens.sort(key=lambda d: -(d.coeficiente_variacao or 0))
-    linhas = [
-        (
+    # Ordenar por CV era o defeito: o CV explode quando a média se aproxima de
+    # zero, e as nove primeiras linhas da tabela eram "Resultado primário" —
+    # média de 0,0556% do PIB, CV de 1.026% — enquanto o IPCA caía para a 35ª
+    # posição de 75. Não era discordância grande; era denominador pequeno.
+    #
+    # A ordenação continua sendo por CV, porque o CV é a única medida aqui que
+    # é adimensional e, por isso, a única que pode ordenar indicadores de
+    # escalas diferentes sem violar a regra de não misturar unidades. O que
+    # mudou é o domínio: só entram no ranking as linhas em que o CV está
+    # definido. As demais não somem — vão para o fim, com o desvio-padrão na
+    # unidade original, que é a informação honesta sobre elas.
+    com_cv = sorted(
+        (d for d in itens if d.coeficiente_variacao is not None),
+        key=lambda d: -(d.coeficiente_variacao or 0.0),
+    )
+    sem_cv = sorted(
+        (d for d in itens if d.coeficiente_variacao is None),
+        key=lambda d: (d.indicador, d.referencia),
+    )
+
+    def _linha(d: an.Dispersao) -> tuple[str, ...]:
+        return (
             d.indicador,
             d.referencia,
+            d.unidade,
             num(d.media) if d.media is not None else "—",
             num(d.desvio_padrao) if d.desvio_padrao is not None else "—",
+            # Três casas: a variação do desvio-padrão é pequena por natureza, e
+            # com duas casas metade da coluna saía como "-0,00".
+            num_sinal(d.variacao_desvio, 3) if d.variacao_desvio is not None else "—",
             f"{num(d.minimo)} – {num(d.maximo)}"
             if d.minimo is not None and d.maximo is not None
             else "—",
@@ -462,25 +585,52 @@ def _secao_dispersao(obs: Sequence[Observacao], data: str) -> str:
             else "—",
             str(d.n_respondentes) if d.n_respondentes else "—",
         )
-        for d in itens[:24]
-    ]
+
     tabela = _tabela(
         "t-dispersao",
-        ("Indicador", "Ano", "Média", "Desvio-padrão", "Mín – Máx", "CV", "Resp."),
-        linhas,
+        (
+            "Indicador",
+            "Ano",
+            "Unid.",
+            "Média",
+            "Desvio-padrão",
+            "Δ 4 sem.",
+            "Mín – Máx",
+            "CV",
+            "Resp.",
+        ),
+        [_linha(d) for d in (*com_cv[:20], *sem_cv[:8])],
         legenda="Ver dispersão entre analistas",
+    )
+
+    abrindo = [d for d in com_cv if (d.variacao_desvio or 0) > 0]
+    resumo_abertura = (
+        f"Nesta edição, {len(abrindo)} de {len(com_cv)} distribuições se abriram em quatro semanas."
+        if com_cv
+        else ""
+    )
+    nota_cv = (
+        f" O CV fica em branco em {len(sem_cv)} linhas: são indicadores cuja média "
+        "cruza o zero — resultado primário, resultado nominal, conta corrente — e "
+        "para os quais a divisão pela média não mede discordância, só a "
+        "proximidade do denominador a zero. Nessas linhas, leia o desvio-padrão na "
+        "unidade da coluna."
+        if sem_cv
+        else ""
     )
     return (
         '<section class="secao"><h2>Dispersão entre analistas</h2>'
         '<p class="nota">Ordenado pelo coeficiente de variação (desvio-padrão sobre a '
-        "média), que torna a discordância comparável entre indicadores de escalas "
-        "diferentes. Dispersão em alta com mediana estável indica distribuição se "
-        "abrindo antes de a mediana se mover.</p>"
+        "média), única medida adimensional da tabela e, por isso, a única que "
+        f"compara indicadores de escalas diferentes.{esc(nota_cv)}</p>"
+        '<p class="nota">A coluna <strong>Δ 4 sem.</strong> é a variação do próprio '
+        "desvio-padrão: dispersão em alta com mediana estável indica a distribuição "
+        f"se abrindo antes de a mediana se mover. {esc(resumo_abertura)}</p>"
         f"{tabela}</section>"
     )
 
 
-# ── Montagem ──────────────────────────────────────────────────────────────────
+# ── Montagem ───────────────────────────────────────────────────────────────
 
 
 def construir(
@@ -525,6 +675,7 @@ def construir(
             selo,
             "</header>",
             _cartoes(observacoes, data, revs),
+            _secao_meta_continua(observacoes, data),
             _secao_revisoes(revs, data),
             _secao_trajetoria(observacoes, revs),
             _secao_ancoragem(observacoes, data),

@@ -289,10 +289,27 @@ def cmd_verificar(args: argparse.Namespace) -> int:
                 "`python -m focus sincronizar --exigir-api` para ver o erro."
             )
         elif do_pdf:
-            avisos.append(
-                f"{do_pdf} observação(ões) vieram do PDF e não têm dispersão "
-                f"({da_api} vieram da API)."
-            )
+            # Nem toda linha vinda do PDF é sintoma.
+            #
+            # A Selic mensal não existe na API de Expectativas: só o quadro do
+            # PDF a publica. Contá-la como anomalia produzia um `[aviso]`
+            # permanente, que aparecia em toda execução e nunca podia ser
+            # resolvido — a mesma patologia do falso positivo que o vigia já
+            # tinha no cálculo de atraso. Alerta que não limpa ensina o dono a
+            # parar de ler os alertas.
+            inesperadas = [
+                o
+                for o in observacoes
+                if o.fonte == store.FONTE_PDF
+                and (o.indicador, o.horizonte) not in api.SEM_COBERTURA_NA_API
+            ]
+            if inesperadas:
+                chaves = sorted({f"{o.indicador}/{o.horizonte}" for o in inesperadas})
+                avisos.append(
+                    f"{len(inesperadas)} observação(ões) vieram do PDF sem que a API "
+                    f"devesse estar faltando: {', '.join(chaves)}. Essas linhas não "
+                    "têm dispersão."
+                )
 
         # Uma só data no histórico significa que revisão, trajetória e
         # amplitude saem vazias — o painel abre e não diz nada.

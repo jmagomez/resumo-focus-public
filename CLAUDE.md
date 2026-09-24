@@ -62,7 +62,18 @@ output/focus/  .md escrito pelo agente e .html efetivamente enviado
 
 ### Análise e apresentação
 - **Nunca misture unidades num mesmo eixo ou ranking.** +1,67 US$ bi e +0,10
-  p.p. não são comparáveis; `analytics.FAMILIA_UNIDADE` agrupa.
+  p.p. não são comparáveis; `analytics.FAMILIA_UNIDADE` agrupa. A única exceção
+  legítima é uma medida **adimensional** — o CV ordena indicadores de escalas
+  diferentes porque já não tem unidade.
+- **A API entrega dado DIÁRIO, o boletim é semanal.** São ~505 datas em dois
+  anos, das quais só ~101 são sextas. Nunca recorte janela por contagem de
+  datas disponíveis (`datas[-52:]`): use `analytics.desde_semanas`, que corta
+  no calendário, e `analytics.amostrar_semanal` para a cadência do gráfico.
+- **CV só onde o CV existe.** `σ/μ` exige escala de razão com média
+  estritamente positiva. Em variável que cruza o zero — resultado primário e
+  nominal, conta corrente — o denominador tende a zero e a razão explode sem
+  que a discordância tenha mudado. `analytics.RAZAO_MINIMA_PARA_CV` guarda
+  isso; linhas sem CV publicável mostram o desvio-padrão na unidade original.
 - Quando a edição da semana anterior não existir no histórico, use a mais
   próxima **e registre qual foi** (`Revisao.data_1_semana`,
   `Revisao.comparacao_exata`).
@@ -83,7 +94,9 @@ Desde janeiro de 2025 vale a **meta contínua**: centro de 3,00% com banda de
 a meta como calendário anual.
 
 O número que a meta avalia é a série `infl12m` — por isso ela vem da API, com
-dispersão e histórico, e não mais só do recorte semanal do PDF.
+dispersão e histórico, e não mais só do recorte semanal do PDF. É também a
+primeira seção do painel: as seções por ano-calendário são úteis, mas nenhuma
+delas é o horizonte que o CMN afere.
 
 ## Ao mexer no código
 - `ruff check .` e `ruff format --check .` são bloqueantes no CI.
