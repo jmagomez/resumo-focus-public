@@ -15,9 +15,16 @@ anterior do projeto não conseguia calcular por não guardar histórico:
     A base de 5 dias úteis reage antes. Gap persistente de um mesmo sinal
     costuma anteceder o movimento da mediana cheia.
 
-**Dispersão** (coeficiente de variação)
+**Dispersão** (desvio-padrão, sua variação em 4 semanas e o CV)
     Discordância entre analistas. Mediana parada com dispersão subindo indica
-    distribuição se abrindo antes de a mediana se mover.
+    distribuição se abrindo antes de a mediana se mover — leitura que exige a
+    *variação* do desvio-padrão, não só o seu nível. O CV normaliza pela média
+    e por isso só vale onde a média é positiva e folgada: ver
+    ``RAZAO_MINIMA_PARA_CV``.
+
+**Meta contínua** (expectativa de 12 meses)
+    O horizonte que o CMN de fato avalia, mês a mês, desde janeiro de 2025 —
+    e não o ano-calendário.
 
 **Ancoragem**
     Distância entre a expectativa de IPCA e a meta, por horizonte. Sob o regime
@@ -90,6 +97,24 @@ def datas_disponiveis(obs: Iterable[Observacao]) -> list[str]:
     return sorted({o.data for o in obs})
 
 
+def desde_semanas(obs: Iterable[Observacao], semanas: int) -> str | None:
+    """Data de corte ``semanas`` antes da última edição — em **calendário**.
+
+    Recortar janela por *contagem de datas disponíveis* (``datas[-52:]``) é
+    errado aqui e o erro é silencioso. A API de Expectativas entrega dado
+    **diário**, não semanal: o histórico tem 505 datas em dois anos, das quais
+    só 101 são sextas-feiras. ``datas[-52:]`` rendia 72 dias corridos num
+    gráfico rotulado como um ano.
+
+    A janela é do calendário, nunca do índice. Quantas observações caem dentro
+    dela é consequência, não parâmetro.
+    """
+    ultima = ultima_data(obs)
+    if ultima is None:
+        return None
+    return (_para_data(ultima) - timedelta(weeks=semanas)).isoformat()
+
+
 def ultima_data(obs: Iterable[Observacao]) -> str | None:
     datas = datas_disponiveis(obs)
     return datas[-1] if datas else None
@@ -122,7 +147,7 @@ def _data_mais_proxima(datas: Sequence[str], alvo: date, tolerancia_dias: int = 
     return None if melhor is None else melhor[1]
 
 
-# ── Revisões ──────────────────────────────────────────────────────────────────
+# ── Revisões ───────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -287,7 +312,7 @@ def por_familia(revs: Sequence[Revisao]) -> list[tuple[str, list[Revisao]]]:
     return ordenadas
 
 
-# ── Amplitude ─────────────────────────────────────────────────────────────────
+# ── Amplitude ────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -330,7 +355,7 @@ def amplitude(revs: Sequence[Revisao]) -> list[Amplitude]:
     ]
 
 
-# ── Trajetórias ───────────────────────────────────────────────────────────────
+# ── Trajetórias ─────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -369,6 +394,24 @@ def trajetoria(
     return pontos
 
 
+def amostrar_semanal(pontos: Sequence[Ponto]) -> list[Ponto]:
+    """Um ponto por semana ISO — o último, que é a edição de sexta.
+
+    A série diária da API tem cinco pontos por semana para um relatório que é
+    semanal. Desenhá-la inteira não acrescenta informação: engrossa a linha com
+    o vaivém intrassemanal da janela móvel de 30 dias e força o eixo a escolher
+    entre densidade ilegível e janela curta.
+
+    Ficar com o último ponto de cada semana reproduz a cadência do próprio
+    Focus e permite desenhar dois anos de história com ~100 marcas.
+    """
+    por_semana: dict[tuple[int, int], Ponto] = {}
+    for ponto in sorted(pontos, key=lambda p: p.data):
+        ano, semana, _ = _para_data(ponto.data).isocalendar()
+        por_semana[(ano, semana)] = ponto
+    return [por_semana[chave] for chave in sorted(por_semana)]
+
+
 def curva(
     obs: Iterable[Observacao],
     *,
@@ -395,7 +438,7 @@ def curva(
     return pares
 
 
-# ── Ancoragem ─────────────────────────────────────────────────────────────────
+# ── Ancoragem ───────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -435,7 +478,123 @@ def ancoragem(
     ]
 
 
-# ── Dispersão ─────────────────────────────────────────────────────────────────
+# ── O horizonte que a meta contínua avalia ────────────────────────────────
+#
+# A meta contínua não é avaliada por ano-calendário. Desde janeiro de 2025 o
+# CMN a afere **mês a mês sobre o IPCA acumulado em doze meses** — e o Focus
+# publica exatamente essa expectativa, na série `infl12m`, suavizada.
+#
+# É o número mais importante do boletim para quem acompanha política monetária,
+# e era o único que o projeto coletava sem nunca exibir.
+
+#: Chave da série de inflação acumulada em 12 meses no histórico longo.
+HORIZONTE_12M = "mensal"
+REFERENCIA_12M = "infl12m"
+
+
+@dataclass(frozen=True)
+class Meta12Meses:
+    """Leitura da expectativa de 12 meses contra a banda da meta contínua."""
+
+    data: str
+    expectativa: float
+    desvio: float
+    piso: float
+    teto: float
+    desvio_padrao: float | None = None
+    n_respondentes: int | None = None
+
+    @property
+    def dentro_da_banda(self) -> bool:
+        return self.piso <= self.expectativa <= self.teto
+
+    @property
+    def situacao(self) -> str:
+        if self.expectativa > self.teto:
+            return "acima do teto da banda"
+        if self.expectativa < self.piso:
+            return "abaixo do piso da banda"
+        if abs(self.desvio) < 0.05:
+            return "no centro da meta"
+        return "acima do centro" if self.desvio > 0 else "abaixo do centro"
+
+    @property
+    def excesso(self) -> float:
+        """Quanto a expectativa passa da banda, em p.p. Zero se dentro."""
+        if self.expectativa > self.teto:
+            return round(self.expectativa - self.teto, 4)
+        if self.expectativa < self.piso:
+            return round(self.piso - self.expectativa, 4)
+        return 0.0
+
+
+def expectativa_12_meses(
+    obs: Iterable[Observacao],
+    *,
+    data: str,
+    indicador: str = "IPCA",
+    base_calculo: int = BASE_30_DIAS,
+    meta: float = META_INFLACAO,
+    banda: float = BANDA_META,
+) -> Meta12Meses | None:
+    """A expectativa de 12 meses na data, posicionada contra a banda."""
+    for o in obs:
+        if (
+            o.data == data
+            and o.indicador == indicador
+            and o.horizonte == HORIZONTE_12M
+            and o.referencia == REFERENCIA_12M
+            and o.base_calculo == base_calculo
+            and o.mediana is not None
+        ):
+            return Meta12Meses(
+                data=o.data,
+                expectativa=o.mediana,
+                desvio=round(o.mediana - meta, 4),
+                piso=round(meta - banda, 4),
+                teto=round(meta + banda, 4),
+                desvio_padrao=o.desvio_padrao,
+                n_respondentes=o.n_respondentes,
+            )
+    return None
+
+
+def serie_12_meses(
+    obs: Iterable[Observacao],
+    *,
+    indicador: str = "IPCA",
+    base_calculo: int = BASE_30_DIAS,
+    desde: str | None = None,
+) -> list[Ponto]:
+    """Trajetória da expectativa de 12 meses — uma marca por semana."""
+    return amostrar_semanal(
+        trajetoria(
+            obs,
+            indicador=indicador,
+            referencia=REFERENCIA_12M,
+            horizonte=HORIZONTE_12M,
+            base_calculo=base_calculo,
+            desde=desde,
+        )
+    )
+
+
+# ── Dispersão ───────────────────────────────────────────────────────────
+
+
+#: Razão mínima |média| / desvio-padrão para que o CV seja publicável.
+#:
+#: O coeficiente de variação exige escala de razão com média estritamente
+#: positiva. Aplicado a variável que **cruza o zero**, o denominador tende a
+#: zero e a razão explode sem que a discordância tenha mudado nada: o
+#: resultado primário de 2030 tinha média de 0,0556% do PIB e desvio-padrão de
+#: 0,5705, o que dava CV de 1.026% — nove das dez primeiras linhas da tabela de
+#: dispersão eram esse artefato, e o IPCA aparecia na 35ª posição de 75.
+#:
+#: Com o limiar em 2, publica-se CV só até 50%. Acima disso, em dado de
+#: expectativa, a leitura é quase sempre denominador pequeno, não discordância
+#: grande.
+RAZAO_MINIMA_PARA_CV = 2.0
 
 
 @dataclass(frozen=True)
@@ -447,12 +606,39 @@ class Dispersao:
     minimo: float | None
     maximo: float | None
     n_respondentes: int | None
+    #: Desvio-padrão da mesma chave há quatro semanas, quando disponível.
+    desvio_padrao_4s: float | None = None
+
+    @property
+    def unidade(self) -> str:
+        return familia(self.indicador)
 
     @property
     def coeficiente_variacao(self) -> float | None:
+        """CV, **ou ``None`` quando a média não sustenta a divisão**.
+
+        Devolver ``None`` é a resposta honesta: não é que a discordância seja
+        desconhecida — o desvio-padrão está ali, na sua unidade original. É a
+        *normalização* que não se aplica.
+        """
         if self.desvio_padrao is None or not self.media:
             return None
-        return round(self.desvio_padrao / abs(self.media), 4)
+        if self.media <= 0 or self.media < RAZAO_MINIMA_PARA_CV * self.desvio_padrao:
+            return None
+        return round(self.desvio_padrao / self.media, 4)
+
+    @property
+    def variacao_desvio(self) -> float | None:
+        """Quanto o desvio-padrão se abriu (ou fechou) em quatro semanas.
+
+        É o número que faltava para a leitura que o painel já prometia em
+        texto: *dispersão em alta com mediana estável indica a distribuição se
+        abrindo antes de a mediana se mover*. Sem ele a tabela era um retrato
+        estático e a frase, uma promessa que o artefato não cumpria.
+        """
+        if self.desvio_padrao is None or self.desvio_padrao_4s is None:
+            return None
+        return round(self.desvio_padrao - self.desvio_padrao_4s, 4)
 
     @property
     def amplitude_total(self) -> float | None:
@@ -474,6 +660,21 @@ def dispersao(
     devolvem ``None`` nesses campos, e a interface deve exibir "—" em vez de
     inventar valor.
     """
+    observacoes = list(obs)
+    no_horizonte = [
+        o for o in observacoes if o.horizonte == horizonte and o.base_calculo == base_calculo
+    ]
+
+    # Desvio-padrão de quatro semanas atrás, pela mesma regra de casamento de
+    # data que as revisões usam: alvo no calendário, tolerância para feriado.
+    datas = sorted({o.data for o in no_horizonte})
+    referencia_4s = _data_mais_proxima(datas, _para_data(data) - timedelta(weeks=4))
+    antes = {
+        (o.indicador, o.referencia): o.desvio_padrao
+        for o in no_horizonte
+        if o.data == referencia_4s
+    }
+
     resultado = [
         Dispersao(
             indicador=o.indicador,
@@ -483,9 +684,10 @@ def dispersao(
             minimo=o.minimo,
             maximo=o.maximo,
             n_respondentes=o.n_respondentes,
+            desvio_padrao_4s=antes.get((o.indicador, o.referencia)),
         )
-        for o in obs
-        if o.data == data and o.horizonte == horizonte and o.base_calculo == base_calculo
+        for o in no_horizonte
+        if o.data == data
     ]
     resultado.sort(key=lambda d: (d.indicador, d.referencia))
     return resultado
