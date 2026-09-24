@@ -84,6 +84,19 @@ SUAVIZADA = "S"
 BASE_30_DIAS = 0
 BASE_5_DIAS_UTEIS = 1
 
+#: Pares ``(indicador, horizonte)`` que a API de Expectativas **não** serve e
+#: que, por isso, só existem no histórico com origem no PDF.
+#:
+#: A Selic mensal é o caso conhecido: o quadro do Focus a publica por mês de
+#: referência, mas os endpoints mensais da API cobrem preços e atividade, não a
+#: trajetória de juros mês a mês.
+#:
+#: Existe para que o diagnóstico possa distinguir "linha sem dispersão porque a
+#: fonte primária não tem esse dado" de "linha sem dispersão porque a
+#: sincronização falhou". Um alerta que não pode ser resolvido é ruído, e é
+#: exatamente assim que se ensina o dono do pipeline a ignorar alertas.
+SEM_COBERTURA_NA_API: frozenset[tuple[str, str]] = frozenset({("Selic", "mensal")})
+
 _HEADERS = {
     "Accept": "application/json",
     "User-Agent": ("resumo-focus-public/2.0 (+https://github.com/jmagomez/resumo-focus-public)"),
@@ -143,19 +156,24 @@ class Expectativa:
 
     @property
     def coeficiente_variacao(self) -> float | None:
-        """Desvio-padrão sobre |média|.
+        """Desvio-padrão sobre |média|, **sem guarda de domínio**.
 
-        Medida de **discordância entre analistas**, comparável entre
-        indicadores de escalas diferentes. Alta dispersão com mediana estável
-        costuma anteceder revisão — a mediana ainda não se moveu, mas a
-        distribuição já se abriu.
+        Medida de discordância entre analistas, adimensional e por isso
+        comparável entre escalas — mas só onde a média é positiva e folgada.
+        Em variável que cruza o zero (resultado primário, conta corrente) o
+        denominador tende a zero e a razão explode sem que a discordância
+        tenha mudado.
+
+        Este é o valor cru da API. Quem apresenta número ao leitor usa
+        ``analytics.Dispersao.coeficiente_variacao``, que aplica a guarda e
+        devolve ``None`` fora do domínio.
         """
         if self.desvio_padrao is None or not self.media:
             return None
         return round(self.desvio_padrao / abs(self.media), 4)
 
 
-# ── Normalização de campos ────────────────────────────────────────────────────
+# ── Normalização de campos ──────────────────────────────────────────────
 
 _ALIASES: dict[str, tuple[str, ...]] = {
     "indicador": ("indicador",),
@@ -257,7 +275,7 @@ def _para_expectativa(
     )
 
 
-# ── Consulta ──────────────────────────────────────────────────────────────────
+# ── Consulta ───────────────────────────────────────────────────────────────
 
 
 def _aspas(valor: str) -> str:
