@@ -40,6 +40,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from . import api
 from .api import BASE_5_DIAS_UTEIS, BASE_30_DIAS
 from .store import Observacao
 
@@ -248,9 +249,11 @@ def revisoes(
             else None
         )
 
-        cv = None
-        if atual.desvio_padrao is not None and atual.media:
-            cv = round(atual.desvio_padrao / abs(atual.media), 4)
+        # Terceira cópia da mesma conta, e a que ninguém lia: nenhum consumidor
+        # do projeto usava `Revisao.coeficiente_variacao`. Campo morto com a
+        # fórmula sem guarda é armadilha armada — quem for usá-lo amanhã herda
+        # o defeito corrigido hoje em outro lugar. Passa pela definição única.
+        cv = api.coeficiente_variacao(atual.desvio_padrao, atual.media)
 
         resultado.append(
             Revisao(
@@ -582,19 +585,14 @@ def serie_12_meses(
 # ── Dispersão ───────────────────────────────────────────────────────────
 
 
-#: Razão mínima |média| / desvio-padrão para que o CV seja publicável.
+#: Reexportados de `api`, que é onde mora a definição única do CV.
 #:
-#: O coeficiente de variação exige escala de razão com média estritamente
-#: positiva. Aplicado a variável que **cruza o zero**, o denominador tende a
-#: zero e a razão explode sem que a discordância tenha mudado nada: o
-#: resultado primário de 2030 tinha média de 0,0556% do PIB e desvio-padrão de
-#: 0,5705, o que dava CV de 1.026% — nove das dez primeiras linhas da tabela de
-#: dispersão eram esse artefato, e o IPCA aparecia na 35ª posição de 75.
-#:
-#: Com o limiar em 2, publica-se CV só até 50%. Acima disso, em dado de
-#: expectativa, a leitura é quase sempre denominador pequeno, não discordância
-#: grande.
-RAZAO_MINIMA_PARA_CV = 2.0
+#: O defeito que isto corrige: o resultado primário de 2030 tinha média de
+#: 0,0556% do PIB e desvio-padrão de 0,5705, o que dava CV de 1.026% — nove das
+#: dez primeiras linhas da tabela de dispersão eram esse artefato, e o IPCA
+#: aparecia na 35ª posição de 75. A justificativa empírica do limiar está no
+#: docstring de `api.RAZAO_MINIMA_PARA_CV`.
+RAZAO_MINIMA_PARA_CV = api.RAZAO_MINIMA_PARA_CV
 
 
 @dataclass(frozen=True)
@@ -615,17 +613,8 @@ class Dispersao:
 
     @property
     def coeficiente_variacao(self) -> float | None:
-        """CV, **ou ``None`` quando a média não sustenta a divisão**.
-
-        Devolver ``None`` é a resposta honesta: não é que a discordância seja
-        desconhecida — o desvio-padrão está ali, na sua unidade original. É a
-        *normalização* que não se aplica.
-        """
-        if self.desvio_padrao is None or not self.media:
-            return None
-        if self.media <= 0 or self.media < RAZAO_MINIMA_PARA_CV * self.desvio_padrao:
-            return None
-        return round(self.desvio_padrao / self.media, 4)
+        """CV, **ou ``None`` quando a média não sustenta a divisão**."""
+        return api.coeficiente_variacao(self.desvio_padrao, self.media)
 
     @property
     def variacao_desvio(self) -> float | None:
