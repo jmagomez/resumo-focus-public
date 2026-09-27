@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import analytics as an
-from . import api, dashboard, mail, pdf, report, store
+from . import api, calendario, dashboard, mail, pdf, report, store
 from .parser import LayoutDesconhecidoError, parsear_arquivo
 
 log = logging.getLogger("focus")
@@ -28,8 +28,9 @@ log = logging.getLogger("focus")
 PASTA_DADOS = Path("data")
 PASTA_SAIDA = Path("output/focus")
 
-#: Além disso, o boletim é considerado velho e o pipeline alerta.
-IDADE_MAXIMA_DIAS = 8
+# A pergunta "o dado está velho?" mora em `calendario`: o Focus é semanal e
+# nomeado pela sexta de coleta, então limiar fixo de dias não serve. Ver o
+# docstring daquele módulo.
 
 
 def _configurar_log(verboso: bool) -> None:
@@ -221,6 +222,7 @@ def cmd_verificar(args: argparse.Namespace) -> int:
     vigia precisa poder contar os ``[ok]`` e confiar na conta.
     """
     hoje = args.hoje or date.today()
+    data_coletada: date | None = None
     problemas: list[str] = []
     avisos: list[str] = []
     aprovados: list[str] = []
@@ -233,13 +235,13 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         data_txt = _data_do_nome(txt)
         if data_txt is None:
             locais.append(f"Nome de arquivo fora do padrão: {txt.name}")
-        else:
-            idade = (hoje - data_txt).days
-            if idade > IDADE_MAXIMA_DIAS:
-                locais.append(
-                    f"Último boletim extraído é de {data_txt} ({idade} dias). "
-                    "O download pode estar quebrado."
-                )
+        elif calendario.esta_atrasado(data_txt, hoje):
+            esperada = calendario.edicao_esperada(hoje)
+            locais.append(
+                f"Último boletim extraído é o de {data_txt}, mas a edição de "
+                f"{esperada} já deveria estar publicada. O download pode estar "
+                "quebrado — ou o BCB atrasou."
+            )
         try:
             boletim = parsear_arquivo(txt)
             resumo_parser = (
@@ -249,6 +251,8 @@ def cmd_verificar(args: argparse.Namespace) -> int:
         except LayoutDesconhecidoError as exc:
             locais.append(f"Parser falhou em {txt.name}: {exc}")
             resumo_parser = None
+
+        data_coletada = data_txt
 
         if locais:
             problemas.extend(locais)
@@ -261,10 +265,12 @@ def cmd_verificar(args: argparse.Namespace) -> int:
     else:
         locais = []
         ultima = an.ultima_data(observacoes) or ""
-        idade_hist = (hoje - datetime.strptime(ultima, "%Y-%m-%d").date()).days
         resumo_hist = f"Histórico: {len(observacoes)} observações, última em {ultima}"
-        if idade_hist > IDADE_MAXIMA_DIAS:
-            locais.append(f"Histórico parado em {ultima} ({idade_hist} dias sem atualização).")
+        if calendario.esta_atrasado(ultima, hoje):
+            esperada = calendario.edicao_esperada(hoje)
+            locais.append(
+                f"Histórico parado em {ultima}: a edição de {esperada} já deveria estar lá."
+            )
         # Saúde da FONTE, não só da entrega.
         #
         # Este bloco existe por causa de uma execução real: o focus-semanal
@@ -315,14 +321,22 @@ def cmd_verificar(args: argparse.Namespace) -> int:
     else:
         data_html = _data_do_nome(htmls[0])
         if data_html is not None:
-            idade = (hoje - data_html).days
-            if idade > IDADE_MAXIMA_DIAS:
+            # A entrega é medida contra a COLETA, não contra o calendário.
+            #
+            # A falha que este vigia existe para pegar é "o download avança e o
+            # boletim não sai" — seis semanas disso passaram despercebidas. Ela
+            # aparece como entrega atrás da coleta, e assim é detectada já na
+            # primeira semana. Comparar com a data de hoje, como antes, media
+            # outra coisa: acusava atraso sempre que o BCB simplesmente ainda
+            # não tinha publicado.
+            if data_coletada is not None and data_html < data_coletada:
                 problemas.append(
-                    f"Último resumo publicado é de {data_html} ({idade} dias). "
-                    "O pipeline baixa dados mas não está entregando o boletim."
+                    f"Coletamos a edição de {data_coletada} e o último resumo "
+                    f"publicado é o de {data_html}. O pipeline baixa dados mas "
+                    "não está entregando o boletim."
                 )
             else:
-                aprovados.append(f"Último resumo publicado: {htmls[0].name} ({idade} dias)")
+                aprovados.append(f"Último resumo publicado: {htmls[0].name}")
 
     for aprovado in aprovados:
         print(f"[ok] {aprovado}")

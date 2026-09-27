@@ -14,6 +14,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import analytics as an
+from . import calendario
 from .charts import (
     CORES_SERIE,
     JS_INTERACAO,
@@ -200,7 +201,7 @@ def _tabela(
     )
 
 
-# ── Seções ────────────────────────────────────────────────────────────────────
+# ── Seções ─────────────────────────────────────────────────────────────────
 
 
 def _cartoes(obs: Sequence[Observacao], data: str, revs: Sequence[an.Revisao]) -> str:
@@ -480,7 +481,7 @@ def _secao_dispersao(obs: Sequence[Observacao], data: str) -> str:
     )
 
 
-# ── Montagem ──────────────────────────────────────────────────────────────────
+# ── Montagem ───────────────────────────────────────────────────────────────
 
 
 def construir(
@@ -501,14 +502,22 @@ def construir(
     revs = an.revisoes(observacoes, data=data)
     hoje = hoje or date.today()
 
-    idade = (hoje - datetime.strptime(data, "%Y-%m-%d").date()).days
-    if idade <= 8:
-        selo = f'<span class="selo">Dados de {_rotulo_data_extensa(data)}</span>'
-    else:
+    # O selo compara a edição que temos com a que já deveria existir, e não com
+    # a data de hoje. O Focus é semanal e o boletim é nomeado pela sexta de
+    # coleta: a edição corrente chega normalmente a dez dias de idade antes de
+    # a próxima sair. Com o limiar fixo de 8 dias que havia aqui, o painel
+    # público exibia "9 dias sem atualização" em vermelho todo fim de semana,
+    # com o pipeline rigorosamente em dia — foi o que aconteceu em 20/09/2026.
+    if calendario.esta_atrasado(data, hoje):
+        idade = (hoje - datetime.strptime(data, "%Y-%m-%d").date()).days
+        esperada = calendario.edicao_esperada(hoje).isoformat()
         selo = (
             f'<span class="selo alerta">Dados de {_rotulo_data_extensa(data)} — '
-            f"{idade} dias sem atualização</span>"
+            f"{idade} dias sem atualização; a edição de "
+            f"{_rotulo_data_extensa(esperada)} já deveria estar publicada</span>"
         )
+    else:
+        selo = f'<span class="selo">Dados de {_rotulo_data_extensa(data)}</span>'
 
     amplitudes = an.amplitude([r for r in revs if r.horizonte == "anual"])
     resumo_amplitude = ", ".join(
