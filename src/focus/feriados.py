@@ -95,3 +95,38 @@ def nome_feriado(data: date) -> str | None:
 def eh_feriado_nacional(data: date) -> bool:
     """``True`` se ``data`` é feriado nacional no Brasil."""
     return data in feriados_nacionais(data.year)
+
+
+def dia_de_execucao(hoje: date) -> bool:
+    """Hoje é o dia de rodar a cadeia semanal?
+
+    Normalmente é a própria segunda-feira. Mas quando a segunda é feriado
+    nacional, o BCB não publica nesse dia — ele escorrega para o próximo dia
+    útil (terça, ou quarta se a terça também for feriado) — e a cadeia
+    precisa escorregar com ele, em vez de só pular a semana inteira e
+    esperar a segunda seguinte, uma semana depois de o boletim já ter saído.
+
+    Por isso os workflows agora são agendados de segunda a quarta: esta
+    função decide qual desses dias é o certo, achando o primeiro dia (a
+    partir da segunda da semana corrente) que não é feriado nacional. Dias
+    depois desse primeiro dia útil devolvem ``False`` — a cadeia já rodou (ou
+    já devia ter rodado) antes, e não deve rodar de novo.
+
+    >>> dia_de_execucao(date(2026, 8, 31))   # segunda comum
+    True
+    >>> dia_de_execucao(date(2026, 10, 12))  # segunda, Nossa Senhora Aparecida
+    False
+    >>> dia_de_execucao(date(2026, 10, 13))  # terça seguinte: dia de recuperação
+    True
+    >>> dia_de_execucao(date(2026, 9, 1))    # terça comum, depois de segunda comum
+    False
+    """
+    segunda = hoje - timedelta(days=hoje.weekday())
+    dia = segunda
+    while dia < hoje:
+        if not eh_feriado_nacional(dia):
+            # Já havia um dia útil (não feriado) antes de hoje nesta semana:
+            # a cadeia já rodou (ou já devia ter rodado) nele, não hoje.
+            return False
+        dia += timedelta(days=1)
+    return not eh_feriado_nacional(hoje)
