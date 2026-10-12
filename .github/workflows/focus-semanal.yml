@@ -1,15 +1,22 @@
 name: Coleta semanal do Focus
 
-# Segunda-feira: baixa o PDF, extrai o texto, sincroniza o histórico com a API
-# de Expectativas do BCB e regenera o dashboard.
+# Segunda a quarta: baixa o PDF, extrai o texto, sincroniza o histórico com a
+# API de Expectativas do BCB e regenera o dashboard.
 #
 # Mudança em relação à versão anterior: o **PDF não é mais commitado**. Ele vira
 # artifact do workflow (90 dias de retenção). O repositório passou a versionar
 # apenas o .txt (12 KB contra 780 KB por edição) e o histórico estruturado.
+#
+# Feriado nacional de segunda: o BCB não publica nesse dia, então o primeiro
+# passo (`python -m focus feriado`) decide se hoje é o dia certo de rodar. Por
+# isso o agendamento cobre segunda a quarta — para a cadeia ter a chance de
+# escorregar para o dia útil seguinte em vez de só pular a semana inteira —
+# e todo passo de trabalho fica condicionado ao resultado dessa checagem. Ver
+# `focus.feriados.dia_de_execucao` e `CLAUDE.md`.
 
 on:
   schedule:
-    - cron: "15 12 * * 1"   # 09h15 BRT
+    - cron: "15 12 * * 1-3"   # 09h15 BRT, segunda a quarta
   workflow_dispatch:
 
 permissions:
@@ -33,10 +40,21 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      - name: Verificar se hoje é dia de rodar a rotina
+        id: feriado
+        run: |
+          if python -m focus feriado; then
+            echo "deve_executar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deve_executar=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Baixar e extrair o boletim
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: python -m focus baixar
 
       - name: Arquivar o PDF como artifact
+        if: steps.feriado.outputs.deve_executar == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: focus-pdf-${{ github.run_number }}
@@ -49,17 +67,21 @@ jobs:
       # parser do PDF entra como reserva. O passo seguinte registra qual fonte
       # alimentou o histórico.
       - name: Sincronizar o histórico de expectativas
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: python -m focus sincronizar
 
       - name: Gerar o dashboard
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: python -m focus dashboard
 
       - name: Verificar a saúde do pipeline
+        if: steps.feriado.outputs.deve_executar == 'true'
         id: verificar
         continue-on-error: true
         run: python -m focus verificar
 
       - name: Commitar texto, histórico e dashboard
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
