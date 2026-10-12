@@ -10,6 +10,13 @@ name: Enviar resumo do Focus
 #
 # O HTML do e-mail é montado pelo código a partir do histórico já validado --
 # o agente escreve texto, nunca tabela.
+#
+# `workflow_run` dispara na CONCLUSÃO do "Resumo do Focus", inclusive numa
+# segunda de feriado nacional em que ele pulou o próprio trabalho de
+# propósito (ver `focus-resumo.yml` e `focus.feriados`). Por isso este
+# workflow também checa por conta própria, como primeiro passo de trabalho:
+# sem ela, ele reenviaria o HTML da semana anterior, que ainda está em
+# output/focus/, como se fosse o boletim desta semana.
 
 on:
   workflow_run:
@@ -38,7 +45,17 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      - name: Verificar se hoje é dia de rodar a rotina
+        id: feriado
+        run: |
+          if python -m focus feriado; then
+            echo "deve_executar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deve_executar=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Montar e enviar
+        if: steps.feriado.outputs.deve_executar == 'true'
         env:
           FOCUS_SMTP_USER:         ${{ secrets.FOCUS_SMTP_USER }}
           FOCUS_SMTP_APP_PASSWORD: ${{ secrets.FOCUS_SMTP_APP_PASSWORD }}
@@ -49,6 +66,7 @@ jobs:
             --url-dashboard "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
 
       - name: Commitar o HTML enviado
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
