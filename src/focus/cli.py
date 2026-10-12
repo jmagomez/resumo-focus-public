@@ -1,6 +1,6 @@
 """Interface de linha de comando do pipeline.
 
-    python -m focus feriado         # hoje é feriado nacional? (pula a rotina)
+    python -m focus feriado         # hoje é o dia de rodar a rotina? (pula senão)
     python -m focus baixar          # PDF do BCB → data/
     python -m focus extrair         # PDF → .txt
     python -m focus sincronizar     # API Olinda (+ PDF como reserva) → histórico
@@ -10,10 +10,11 @@
 
 Todo comando devolve código de saída diferente de zero quando o passo falha,
 para que o GitHub Actions interrompa a cadeia em vez de publicar dado velho.
-``feriado`` também devolve código diferente de zero num feriado nacional —
-mas de propósito, para que a cadeia pare *sem isso ser uma falha*. Ver
-`feriados.py` e os workflows `focus-semanal`, `focus-resumo` e
-`focus-enviar`, que fazem essa checagem antes de processar qualquer coisa.
+``feriado`` também devolve código diferente de zero numa segunda de feriado
+nacional — mas de propósito, para que a cadeia pare *sem isso ser uma falha*
+e escorregue para o próximo dia útil (terça, ou quarta). Ver `feriados.py` e
+os workflows `focus-semanal`, `focus-resumo` e `focus-enviar`, que fazem essa
+checagem antes de processar qualquer coisa.
 """
 
 from __future__ import annotations
@@ -90,25 +91,36 @@ def _erro(mensagem: str) -> None:
 
 
 def cmd_feriado(args: argparse.Namespace) -> int:
-    """Hoje é feriado nacional? Existe para os workflows pularem a rotina.
+    """Hoje é o dia de rodar a cadeia semanal? Existe para os workflows
+    pularem a rotina num feriado nacional — e rodarem no dia útil seguinte.
 
-    O Focus só é publicado pelo BCB em dia útil; rodar a cadeia inteira numa
-    segunda-feira de feriado nacional não quebra nada sozinho (o downloader já
+    O Focus só é publicado pelo BCB em dia útil. Numa segunda de feriado
+    nacional, rodar a cadeia inteira não quebra nada sozinho (o downloader já
     reaproveita o PDF da sexta anterior), mas processa dado que não é novo e,
     pior, arrisca reenviar o e-mail da semana passada caso o agente regrave a
-    mesma prosa e o `workflow_run` seguinte dispare sobre isso. Ver
-    `feriados.py`.
+    mesma prosa e o `workflow_run` seguinte dispare sobre isso. Por isso os
+    workflows agora também são agendados para terça e quarta: `feriados.
+    dia_de_execucao` decide qual desses dias é o certo, e todo outro dia
+    pula. Ver `feriados.py`.
     """
     hoje = args.data or date.today()
+    if feriados.dia_de_execucao(hoje):
+        print(f"[ok] {hoje.isoformat()} é o dia de rodar a rotina desta semana.")
+        return 0
+
     nome = feriados.nome_feriado(hoje)
     if nome is not None:
         print(
             f"[feriado] {hoje.isoformat()} é feriado nacional ({nome}). "
-            "Pular a rotina desta semana."
+            "Pular — a cadeia escorrega para o próximo dia útil."
         )
-        return 1
-    print(f"[ok] {hoje.isoformat()} não é feriado nacional.")
-    return 0
+    else:
+        print(
+            f"[feriado] {hoje.isoformat()} não é o dia de recuperação desta semana "
+            "(a segunda, ou o primeiro dia útil depois de um feriado de segunda, "
+            "já rodou ou já deveria ter rodado). Pular."
+        )
+    return 1
 
 
 def cmd_baixar(args: argparse.Namespace) -> int:
