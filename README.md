@@ -51,6 +51,7 @@ contribui com interpretação — resumo executivo e hipóteses para as revisõe
 ```bash
 pip install -r requirements.txt
 
+python -m focus feriado       # hoje é feriado nacional? (os workflows pulam a rotina)
 python -m focus baixar        # PDF do BCB → data/, e extrai o .txt
 python -m focus sincronizar   # API (+ PDF como reserva) → data/history/
 python -m focus dashboard     # histórico → docs/index.html
@@ -91,6 +92,8 @@ src/focus/
   dashboard.py   dashboard estático autocontido
   report.py      HTML do e-mail
   mail.py        envio via SMTP
+  calendario.py  "a edição é a mais recente que já deveria existir?"
+  feriados.py    feriados nacionais do Brasil — quando a rotina pula
   cli.py         `python -m focus ...`
 
 data/
@@ -143,10 +146,16 @@ Nenhum endereço ou credencial aparece no código ou nos arquivos do repositóri
 | Workflow | Quando | O que faz |
 |---|---|---|
 | `focus-semanal` | segunda, 09h15 BRT | baixa, extrai, sincroniza, gera o dashboard e commita |
-| `focus-enviar` | push de `output/focus/*.md` | monta o HTML e envia o e-mail |
+| `focus-resumo` | ao fim de `focus-semanal` | agente escreve a prosa da semana (`output/focus/*.md`) |
+| `focus-enviar` | ao fim de `focus-resumo` | monta o HTML e envia o e-mail |
 | `focus-vigia` | diariamente, 12h BRT | verifica se o pipeline está **entregando** e avisa quando para |
 | `ci` | push, PR e semanalmente | ruff (bloqueante), pytest e contrato da API |
 | `pages` | push em `docs/` | publica o dashboard |
+
+Os três primeiros da cadeia pulam o próprio trabalho, sem falhar, quando o
+dia é feriado nacional no Brasil (`python -m focus feriado`, `focus.feriados`)
+— o BCB não publica nesses dias, e processar dado velho só arriscaria
+reenviar o e-mail da semana anterior.
 
 O `focus-vigia` existe por um motivo específico: entre 31/07 e 11/09 de 2026 o
 repositório continuou baixando PDFs toda semana e não publicou nenhum resumo.
