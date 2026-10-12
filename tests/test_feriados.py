@@ -2,10 +2,13 @@
 
 Por que importa para os workflows: `focus-semanal`, `focus-resumo` e
 `focus-enviar` chamam `python -m focus feriado` antes de fazer qualquer
-trabalho numa segunda-feira — ver `cli.cmd_feriado` e os comentários nos três
-arquivos de workflow. Um feriado nacional mal reconhecido (ou um dia comum
-tratado como feriado) tanto desperdiça execução quanto, no pior caso, deixa a
-cadeia reprocessar a edição da semana anterior e reenviar o e-mail.
+trabalho numa segunda, terça ou quarta — ver `cli.cmd_feriado` e os
+comentários nos três arquivos de workflow. Um feriado nacional mal
+reconhecido (ou um dia comum tratado como feriado) tanto desperdiça execução
+quanto, no pior caso, deixa a cadeia reprocessar a edição da semana anterior
+e reenviar o e-mail. E sem o dia de recuperação (`dia_de_execucao`), uma
+segunda de feriado nacional não pularia só aquele dia — pularia a semana
+inteira, porque a próxima tentativa só viria na segunda seguinte.
 """
 
 from datetime import date
@@ -70,6 +73,31 @@ def test_carnaval_nao_e_feriado_nacional():
     assert not feriados.eh_feriado_nacional(date(2026, 2, 16))
 
 
+# ── Dia de recuperação: a cadeia escorrega para o próximo dia útil ────────────
+
+
+def test_segunda_comum_e_dia_de_execucao():
+    assert feriados.dia_de_execucao(date(2026, 8, 31))  # segunda, sem feriado
+
+
+def test_segunda_de_feriado_nao_e_dia_de_execucao():
+    assert not feriados.dia_de_execucao(date(2026, 10, 12))  # Nossa Sra. Aparecida
+
+
+def test_terca_apos_segunda_de_feriado_e_o_dia_de_recuperacao():
+    """O caso real: 12/10/2026 (segunda) é feriado, então a cadeia escorrega
+    para 13/10/2026 (terça) — em vez de esperar a segunda seguinte, uma
+    semana depois de o BCB já ter publicado."""
+    assert feriados.dia_de_execucao(date(2026, 10, 13))
+
+
+def test_terca_apos_segunda_comum_nao_roda_de_novo():
+    """01/09/2026 é terça, mas 31/08/2026 (segunda) não era feriado — a
+    cadeia já rodou nela, e a terça não deve rodar de novo."""
+    assert not feriados.eh_feriado_nacional(date(2026, 8, 31))
+    assert not feriados.dia_de_execucao(date(2026, 9, 1))
+
+
 # ── CLI: o que os workflows realmente chamam ──────────────────────────────────
 
 
@@ -86,9 +114,20 @@ def test_cli_feriado_reprova_e_nomeia_o_feriado(capsys):
     assert "Nossa Senhora Aparecida" in saida
 
 
-def test_cli_feriado_aprova_dia_comum(capsys):
+def test_cli_feriado_aprova_o_dia_de_recuperacao(capsys):
+    """13/10/2026 (terça) é o dia de recuperação da segunda de feriado."""
     codigo = main(["feriado", "--data", "2026-10-13"])
     saida = capsys.readouterr().out
 
     assert codigo == 0
     assert "[ok]" in saida
+
+
+def test_cli_feriado_reprova_terca_comum_sem_repetir_a_semana(capsys):
+    """Terça comum depois de segunda comum: a cadeia já rodou, não repete."""
+    codigo = main(["feriado", "--data", "2026-09-01"])
+    saida = capsys.readouterr().out
+
+    assert codigo == 1
+    assert "feriado nacional" not in saida
+    assert "dia de recuperação" in saida
