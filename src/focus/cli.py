@@ -1,5 +1,6 @@
 """Interface de linha de comando do pipeline.
 
+    python -m focus feriado         # hoje é feriado nacional? (pula a rotina)
     python -m focus baixar          # PDF do BCB → data/
     python -m focus extrair         # PDF → .txt
     python -m focus sincronizar     # API Olinda (+ PDF como reserva) → histórico
@@ -9,6 +10,10 @@
 
 Todo comando devolve código de saída diferente de zero quando o passo falha,
 para que o GitHub Actions interrompa a cadeia em vez de publicar dado velho.
+``feriado`` também devolve código diferente de zero num feriado nacional —
+mas de propósito, para que a cadeia pare *sem isso ser uma falha*. Ver
+`feriados.py` e os workflows `focus-semanal`, `focus-resumo` e
+`focus-enviar`, que fazem essa checagem antes de processar qualquer coisa.
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import analytics as an
-from . import api, calendario, dashboard, mail, pdf, report, store
+from . import api, calendario, dashboard, feriados, mail, pdf, report, store
 from .parser import LayoutDesconhecidoError, parsear_arquivo
 
 log = logging.getLogger("focus")
@@ -82,6 +87,28 @@ def _erro(mensagem: str) -> None:
 
 
 # ── Comandos ──────────────────────────────────────────────────────────────────
+
+
+def cmd_feriado(args: argparse.Namespace) -> int:
+    """Hoje é feriado nacional? Existe para os workflows pularem a rotina.
+
+    O Focus só é publicado pelo BCB em dia útil; rodar a cadeia inteira numa
+    segunda-feira de feriado nacional não quebra nada sozinho (o downloader já
+    reaproveita o PDF da sexta anterior), mas processa dado que não é novo e,
+    pior, arrisca reenviar o e-mail da semana passada caso o agente regrave a
+    mesma prosa e o `workflow_run` seguinte dispare sobre isso. Ver
+    `feriados.py`.
+    """
+    hoje = args.data or date.today()
+    nome = feriados.nome_feriado(hoje)
+    if nome is not None:
+        print(
+            f"[feriado] {hoje.isoformat()} é feriado nacional ({nome}). "
+            "Pular a rotina desta semana."
+        )
+        return 1
+    print(f"[ok] {hoje.isoformat()} não é feriado nacional.")
+    return 0
 
 
 def cmd_baixar(args: argparse.Namespace) -> int:
@@ -372,6 +399,18 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="focus", description=__doc__)
     p.add_argument("-v", "--verboso", action="store_true", help="log em nível DEBUG")
     sub = p.add_subparsers(dest="comando", required=True)
+
+    fe = sub.add_parser(
+        "feriado",
+        help="diz se hoje é feriado nacional (os workflows pulam a rotina quando é)",
+    )
+    fe.add_argument(
+        "--data",
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
+        default=None,
+        help="sobrescreve a data de hoje (para testes)",
+    )
+    fe.set_defaults(func=cmd_feriado)
 
     b = sub.add_parser("baixar", help="baixa o PDF mais recente do Focus")
     b.add_argument("--destino", type=Path, default=PASTA_DADOS)
