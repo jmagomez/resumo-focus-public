@@ -12,6 +12,14 @@ name: Resumo do Focus
 # Dispara por `workflow_run` e não por `push` porque a coleta commita com o
 # GITHUB_TOKEN padrão, e o GitHub não dispara workflows a partir de eventos
 # gerados por esse token.
+#
+# `workflow_run` dispara na CONCLUSÃO da "Coleta semanal do Focus", não só
+# quando ela de fato coletou algo novo -- inclusive numa segunda de feriado
+# nacional em que ela pulou o próprio trabalho de propósito (ver
+# `focus-semanal.yml` e `focus.feriados`). Por isso este workflow faz a
+# mesma checagem por conta própria, como primeiro passo de trabalho: sem
+# ela, ele escreveria uma prosa nova sobre dado que não mudou, e a cadeia
+# reenviaria o boletim da semana anterior.
 
 on:
   workflow_run:
@@ -36,17 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Falha cedo e com mensagem clara, em vez de quebrar dentro do passo
-      # do agente com um erro de autenticação.
-      - name: Verificar o secret ANTHROPIC_API_KEY
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::Secret ANTHROPIC_API_KEY ausente. Configure em Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -55,7 +52,29 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      - name: Verificar se hoje é dia de rodar a rotina
+        id: feriado
+        run: |
+          if python -m focus feriado; then
+            echo "deve_executar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deve_executar=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Falha cedo e com mensagem clara, em vez de quebrar dentro do passo
+      # do agente com um erro de autenticação.
+      - name: Verificar o secret ANTHROPIC_API_KEY
+        if: steps.feriado.outputs.deve_executar == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Secret ANTHROPIC_API_KEY ausente. Configure em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
       - name: Instalar o Claude Code
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
       # --dangerously-skip-permissions e o modo headless: nao ha ninguem para
@@ -63,6 +82,7 @@ jobs:
       # um GITHUB_TOKEN de escopo unico; o comando em .claude/commands/ define
       # a tarefa e proibe inventar numero.
       - name: Escrever a prosa da semana
+        if: steps.feriado.outputs.deve_executar == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: claude -p "/gerar-resumo" --dangerously-skip-permissions
@@ -71,6 +91,7 @@ jobs:
       # verde e a semana sem boletim -- exatamente o modo de falha que este
       # repositório já viveu por seis semanas sem que nada reclamasse.
       - name: Exigir que a prosa exista
+        if: steps.feriado.outputs.deve_executar == 'true'
         id: prosa
         run: |
           data="$(ls data/focus_*.txt | sort | tail -1 | sed 's/.*focus_//; s/\.txt$//')"
@@ -84,6 +105,7 @@ jobs:
           cat "$arquivo"
 
       - name: Commitar a prosa
+        if: steps.feriado.outputs.deve_executar == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
