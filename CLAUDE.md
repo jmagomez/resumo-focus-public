@@ -35,7 +35,7 @@ executivo por e-mail.
 ## Estrutura
 ```
 src/focus/     pacote (pdf, parser, api, store, analytics, charts,
-               dashboard, report, mail, cli)
+               dashboard, report, mail, cli, calendario, feriados)
 tests/         pytest; os casos apontam para os boletins reais de data/
 data/          .txt versionado (serve de fixture); PDFs ignorados;
                history/ com o CSV longo
@@ -58,6 +58,26 @@ output/focus/  .md escrito pelo agente e .html efetivamente enviado
   pergunta outra coisa: *é a edição mais recente que já deveria existir?*
 - Só aceita resposta que comece com `%PDF` **e** tenha ao menos 50 KB — o
   portal do BCB às vezes devolve página de erro com HTTP 200.
+
+### Feriados nacionais — quando a rotina nem começa
+- `focus.feriados` modela o calendário de feriados nacionais do Brasil
+  (fixos pela Lei nº 10.607/2002 + Sexta-feira da Paixão, móvel, + Dia
+  Nacional de Zumbi e da Consciência Negra desde 2024, Lei nº 14.759/2023).
+  Carnaval e Corpus Christi ficam de fora de propósito: são pontos
+  facultativos por decreto, não feriados nacionais por lei.
+- `python -m focus feriado` devolve código de saída 1 (e nomeia o feriado)
+  quando "hoje" é feriado nacional. Os três workflows da cadeia semanal —
+  `focus-semanal`, `focus-resumo` e `focus-enviar` — chamam esse comando como
+  primeiro passo de trabalho e pulam o resto do job quando ele reprova. Cada
+  um checa por conta própria, porque cada um é disparado por `workflow_run`
+  do anterior **completar**, não de ele ter feito algo: sem a checagem
+  própria, uma segunda de feriado em que a coleta não encontra nada novo
+  ainda dispararia o resumo e o envio, que acabariam reprocessando — e
+  reenviando — a edição da semana passada.
+- Isso não troca a folga de `focus.calendario` (que continua sem modelar
+  feriados de propósito, para o diagnóstico de atraso) — resolve um problema
+  diferente: não *processar* numa segunda que é feriado, e não só tolerar o
+  atraso que isso causa.
 
 ### Parsing
 - Os períodos de referência e o formato das colunas são lidos do **cabeçalho do
