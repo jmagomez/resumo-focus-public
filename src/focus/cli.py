@@ -205,10 +205,21 @@ def cmd_email(args: argparse.Namespace) -> int:
     # ele ainda ia escrever, e a etapa era impossível de cumprir. Foi assim
     # que o elo do meio nunca saiu do papel e o pipeline passou seis semanas
     # coletando sem publicar.
+    #
+    # O caminho default tem de ser o .md desta EDIÇÃO (`focus_{data}.md`),
+    # nunca "o .md mais recente que existir". `sorted(glob(...), reverse=True)`
+    # parecia equivalente e não é: quando o agente ainda não escreveu a prosa
+    # da semana (ou o workflow que o chama falha), o glob caía para o .md da
+    # edição anterior e o e-mail saía com a narrativa de uma semana colada no
+    # quadro-resumo de outra -- sem nenhum número inventado, mas com números
+    # novos descrevendo uma história velha. É o run #10 de `focus-resumo` em
+    # 19/10/2026: a coleta trouxe 2026-10-16, não havia focus_2026-10-16.md, e
+    # o glob teria devolvido focus_2026-10-09.md se o agente tivesse chamado
+    # `email` de verdade em vez de só `--dry-run`.
     caminho_prosa = args.prosa
     if caminho_prosa is None:
-        candidatos = sorted(PASTA_SAIDA.glob("focus_*.md"), reverse=True)
-        caminho_prosa = candidatos[0] if candidatos else None
+        candidato = PASTA_SAIDA / f"focus_{data}.md"
+        caminho_prosa = candidato if candidato.exists() else None
 
     if caminho_prosa is None:
         prosa = report.Prosa(resumo="", revisoes=[])

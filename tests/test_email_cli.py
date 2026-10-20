@@ -81,3 +81,43 @@ def test_prosa_da_semana_entra_no_corpo(ambiente, capsys):
     assert codigo == 0
     assert "recuou para 4,90%" in texto.out
     assert "nenhuma prosa" not in texto.err.lower()
+
+
+def test_prosa_de_edicao_anterior_nao_substitui_a_da_semana(ambiente, capsys):
+    """run #10 de `focus-resumo`, 19/10/2026: a coleta trouxe 2026-10-16, não
+
+    havia focus_2026-10-16.md, e o único .md em output/focus/ era o da edição
+    anterior. `sorted(glob("focus_*.md"), reverse=True)` não distinguia "a
+    prosa desta semana não existe" de "a prosa mais recente que existir vale",
+    e o e-mail real teria saído com a narrativa de 2026-09-04 (ou de qualquer
+    edição mais antiga) colada no quadro-resumo de 2026-09-11 -- outra
+    instância do padrão de falha silenciosa que `focus.calendario` e o vigia
+    já cobrem para download e para entrega: aqui era a prosa que podia ficar
+    velha sem que nada reclamasse.
+    """
+    saida, historico = ambiente
+    (saida / "focus_2026-09-04.md").write_text(
+        "Texto de uma edição anterior, que não é a desta semana.\n\n- IPCA (2026): 4,80 → 5,01.\n",
+        encoding="utf-8",
+    )
+
+    codigo = main(["email", "--historico", str(historico), "--dry-run"])
+    texto = capsys.readouterr()
+
+    assert codigo == 0
+    assert "Texto de uma edição anterior" not in texto.out
+    assert "nenhuma prosa" in texto.err.lower()
+
+
+def test_envio_real_recusa_prosa_de_edicao_anterior(ambiente, capsys):
+    saida, historico = ambiente
+    (saida / "focus_2026-09-04.md").write_text(
+        "Texto de uma edição anterior.\n\n- IPCA (2026): 4,80 → 5,01.\n",
+        encoding="utf-8",
+    )
+
+    codigo = main(["email", "--historico", str(historico)])
+    erro = capsys.readouterr().err
+
+    assert codigo == 1
+    assert "sem prosa da semana" in erro
