@@ -25,6 +25,13 @@ Thumbs.db
 .idea/
 .vscode/
 
+# stdout+stderr de "Resumo do Focus" e "Enviar resumo do Focus" (ver
+# focus-resumo.yml e focus-enviar.yml) -- só servem para o e-mail de falha e
+# o artifact da run; nenhum dos dois workflows faz `git add -A`, mas o
+# ignore evita que isso mude por engano.
+/logs/agente-ultima-execucao.log
+/logs/enviar-ultima-execucao.log
+
 # PDFs do Focus não são mais versionados: ~780 KB por edição, ~40 MB/ano.
 # A partir da v2 eles são artifact do workflow (90 dias) e o repositório guarda
 # o .txt (12 KB) mais o histórico estruturado em data/history/.
