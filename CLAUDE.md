@@ -116,6 +116,29 @@ output/focus/  .md escrito pelo agente e .html efetivamente enviado
   HTML, o quadro-resumo, as setas e as cores são gerados por `focus.report`.
 - **Nunca invente número**: todo valor citado deve estar literalmente na saída
   de `python -m focus email --dry-run` ou no `.txt` do boletim.
+- **A prosa tem de ser a desta edição, não a mais recente que existir.**
+  `cmd_email` resolvia o caminho default com
+  `sorted(glob("focus_*.md"), reverse=True)[0]` — "o .md mais recente que
+  houver", não "o .md desta data". Quando o agente não escrevia a prosa da
+  semana (run #10 de `focus-resumo`, 19/10/2026: a coleta trouxe
+  `focus_2026-10-16.txt` e não havia `focus_2026-10-16.md`), o comando caía
+  silenciosamente para a prosa da edição anterior e a publicava junto do
+  quadro-resumo novo — nenhum número inventado, mas uma narrativa velha
+  descrevendo dados novos, o mesmo tipo de falha silenciosa que
+  `focus.calendario` e o vigia existem para pegar em download e em entrega.
+  Corrigido: o caminho default é exatamente `focus_{data}.md`; sem ele, o
+  comportamento é o mesmo de "nenhuma prosa" (`cli.py`, `cmd_email`).
+- **Não há rotina externa agendada para este passo.** Até 16/09/2026 (#18)
+  não existia `focus-resumo.yml`, e uma rotina do Claude Code fora do
+  repositório (agendada às segundas) tentava preencher o vão escrevendo HTML
+  à mão e fazendo `git push` direto — os dois hábitos que este arquivo já
+  rejeita (ver "Divisão de trabalho" acima e `focus-enviar.yml`, que não
+  dispara por push). Essa rotina foi desativada em 20/10/2026: o passo já
+  roda dentro do próprio CI (`focus-resumo.yml` chama `claude -p
+  "/gerar-resumo"`, contrato em `.claude/commands/gerar-resumo.md`), e manter
+  as duas ativas arriscava duplicar o e-mail ou reintroduzir exatamente os
+  defeitos que a v2 deste pipeline corrigiu (seta na coluna errada, cor
+  invertida — ver histórico de commits de `focus.report`).
 
 ### Meta de inflação
 Desde janeiro de 2025 vale a **meta contínua**: centro de 3,00% com banda de
