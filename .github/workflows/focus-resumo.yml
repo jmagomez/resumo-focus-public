@@ -26,6 +26,14 @@ on:
     workflows: ["Coleta semanal do Focus"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      ignorar_feriado:
+        description: >-
+          Ignorar verificacao de feriado e forcar geracao da prosa.
+          Use para re-execucoes manuais de recuperacao.
+        type: boolean
+        default: false
+
 
 permissions:
   contents: write
@@ -55,7 +63,10 @@ jobs:
       - name: Verificar se hoje é dia de rodar a rotina
         id: feriado
         run: |
-          if python -m focus feriado; then
+          if [ "${{ inputs.ignorar_feriado }}" = "true" ]; then
+            echo "deve_executar=true" >> "$GITHUB_OUTPUT"
+            echo "[ok] ignorar_feriado=true -- execucao forcada via workflow_dispatch."
+          elif python -m focus feriado; then
             echo "deve_executar=true" >> "$GITHUB_OUTPUT"
           else
             echo "deve_executar=false" >> "$GITHUB_OUTPUT"
