@@ -245,15 +245,22 @@ def cmd_email(args: argparse.Namespace) -> int:
     texto = report.texto_alternativo(html)
     assunto = f"Boletim Focus — {data}"
 
-    destino_html = PASTA_SAIDA / f"focus_{data}.html"
-    destino_html.parent.mkdir(parents=True, exist_ok=True)
-    destino_html.write_text(html, encoding="utf-8")
-    print(f"HTML gravado: {destino_html}")
-
+    # --dry-run: mostra os números sem gravar HTML nem enviar e-mail.
+    #
+    # O HTML só é gravado no envio real, não aqui. Quando o dry-run escrevia
+    # o HTML como efeito colateral, o agente de resumo via "HTML gravado:" na
+    # saída e podia interpretar que a tarefa estava concluída — e parar sem
+    # escrever o .md. O dry-run exibe os números para o agente ler e escrever
+    # a prosa; gravar o HTML é responsabilidade do `focus-enviar.yml`.
     if args.dry_run:
         print("--- DRY-RUN: e-mail não enviado ---")
         print(texto[:1200])
         return 0
+
+    destino_html = PASTA_SAIDA / f"focus_{data}.html"
+    destino_html.parent.mkdir(parents=True, exist_ok=True)
+    destino_html.write_text(html, encoding="utf-8")
+    print(f"HTML gravado: {destino_html}")
 
     destino = mail.destino_do_ambiente(destinatarios=args.dest)
     mail.enviar(mail.montar(assunto, html, texto, destino), destino)
