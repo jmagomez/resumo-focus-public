@@ -18,7 +18,12 @@ validado. Você não monta tabela, não calcula variação e não formata valor.
    é essa a data da edição. O resto da saída é o quadro-resumo com a mediana de
    hoje e a variação contra a edição anterior, indicador por indicador.
 
-   Se o comando reclamar que não há prosa em `output/focus/*.md`, ignore: é
+   **Atencao:** `--dry-run` exibe os numeros mas NAO grava nenhum arquivo.
+   Nao ha `focus_AAAA-MM-DD.html` gerado aqui -- o HTML de envio e gerado
+   automaticamente pelo `focus-enviar.yml` depois que voce escrever o `.md`.
+   Seu unico produto e o arquivo `.md` do passo 3.
+
+      Se o comando reclamar que não há prosa em `output/focus/*.md`, ignore: é
    exatamente o arquivo que você vai escrever. Use `--prosa /dev/null` para ver
    os números assim mesmo.
 
