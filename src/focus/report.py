@@ -180,14 +180,43 @@ _ORDEM_QUADRO = (
 )
 
 
+def _bloco_errata(errata: Prosa) -> str:
+    """Aviso de correção, no topo, antes de qualquer número.
+
+    Quem recebe uma errata precisa saber o que mudou sem comparar dois e-mails
+    lado a lado: o aviso diz o que estava errado e lista as correções, e o
+    boletim corrigido vem logo abaixo, inteiro.
+    """
+    itens = "".join(f'<li style="margin-bottom:4px;">{esc(item)}</li>' for item in errata.revisoes)
+    lista = (
+        '<ul style="font-size:13.5px;line-height:1.5;margin:8px 0 0;padding-left:20px;">'
+        f"{itens}</ul>"
+        if itens
+        else ""
+    )
+    return (
+        f'<div style="border:1px solid {VERMELHO};border-left:4px solid {VERMELHO};'
+        'border-radius:6px;padding:12px 14px;margin:0 0 20px;background:#fdf3f2;">'
+        f'<p style="color:{VERMELHO};font-size:13px;font-weight:700;margin:0 0 6px;'
+        'text-transform:uppercase;letter-spacing:.04em;">Errata</p>'
+        f'<p style="font-size:14px;line-height:1.55;margin:0;">{esc(errata.resumo)}</p>'
+        f"{lista}</div>"
+    )
+
+
 def construir(
     revs: Sequence[an.Revisao],
     prosa: Prosa,
     *,
     data: str,
     url_dashboard: str | None = None,
+    errata: Prosa | None = None,
 ) -> str:
-    """Monta o HTML completo do e-mail."""
+    """Monta o HTML completo do e-mail.
+
+    Com ``errata``, o aviso de correção entra antes do resumo; o resto do
+    boletim é o mesmo, já com os números corrigidos.
+    """
     anos = sorted(
         {r.referencia for r in revs if r.horizonte == "anual" and r.referencia.isdigit()}
     )[:3]
@@ -222,6 +251,7 @@ def construir(
         f"Boletim Focus — {esc(_data_extensa(data))}</h1>"
         f'<p style="color:{CINZA};font-size:13px;margin:0 0 18px;">'
         "Expectativas de mercado · Banco Central do Brasil</p>"
+        f"{_bloco_errata(errata) if errata is not None else ''}"
         f'<p style="font-size:14.5px;line-height:1.6;margin:0 0 20px;">'
         f"{esc(prosa.resumo)}</p>"
         f'<h2 style="color:{MARCA};font-size:16px;margin:0 0 4px;">Quadro-resumo</h2>'
