@@ -24,6 +24,25 @@ rigorosamente em dia.
 
 A pergunta certa não é *"quantos dias tem o dado?"*, e sim *"o dado é a edição
 mais recente que já deveria existir?"*. É o que este módulo responde.
+
+Sexta-feira que é feriado
+-------------------------
+"Nomeado pela sexta" vale para a semana comum. Quando a sexta é feriado, o
+BCB fecha a coleta no último dia útil e **data a edição por ele**: a semana de
+20/11/2026 (Consciência Negra, sexta) gerou ``R20261119.pdf`` — quinta — e a
+API de Expectativas também terminou em ``2026-11-19``.
+
+Exigir a sexta literal produziu o segundo falso alarme deste módulo: de
+quarta 25/11 em diante o vigia (run #71) cobrava a "edição de 2026-11-20", que
+nunca vai existir, com coleta, histórico, e-mail e painel todos em dia.
+
+A correção não modela feriados — pelo mesmo motivo que a folga de publicação
+não modela: o calendário do BCB tem pontos facultativos (24/12, 31/12,
+Carnaval) que nenhuma lei lista. Em vez disso, a cobrança passa a ser pela
+**semana** da edição esperada: qualquer edição datada de segunda a sexta
+dessa semana a satisfaz. Isso não perde poder de detecção — uma coleta
+travada fica parada numa semana **anterior**, e continua reprovando no mesmo
+dia em que reprovava antes.
 """
 
 from __future__ import annotations
@@ -47,8 +66,16 @@ def _para_data(valor: str | date) -> date:
     return valor if isinstance(valor, date) else datetime.strptime(valor[:10], "%Y-%m-%d").date()
 
 
+def _segunda_da_semana(dia: date) -> date:
+    return dia - timedelta(days=dia.weekday())
+
+
 def edicao_esperada(hoje: date) -> date:
     """Sexta de coleta da edição mais recente que já deveria estar publicada.
+
+    É a sexta **nominal** da semana cobrada — serve para nomear a edição nas
+    mensagens. Se ela for feriado, a edição real virá datada de um dia antes;
+    quem decide se está atrasado é `esta_atrasado`, que compara pela semana.
 
     >>> edicao_esperada(date(2026, 9, 20))   # domingo
     datetime.date(2026, 9, 11)
@@ -61,11 +88,30 @@ def edicao_esperada(hoje: date) -> date:
     return limite - timedelta(days=(limite.weekday() - SEXTA) % 7)
 
 
+def inicio_da_semana_esperada(hoje: date) -> date:
+    """Segunda-feira da semana cuja edição já deveria estar publicada.
+
+    Qualquer edição datada deste dia em diante satisfaz a cobrança — inclusive
+    a de uma quinta, quando a sexta é feriado.
+
+    >>> inicio_da_semana_esperada(date(2026, 11, 25))
+    datetime.date(2026, 11, 16)
+    """
+    return _segunda_da_semana(edicao_esperada(hoje))
+
+
 def esta_atrasado(edicao: str | date, hoje: date) -> bool:
-    """A edição que temos ficou para trás da que já deveria existir?"""
-    return _para_data(edicao) < edicao_esperada(hoje)
+    """A edição que temos ficou para trás da semana que já deveria existir?
+
+    >>> esta_atrasado("2026-11-19", date(2026, 11, 25))  # sexta 20/11 foi feriado
+    False
+    >>> esta_atrasado("2026-11-13", date(2026, 11, 25))  # semana anterior: atraso real
+    True
+    """
+    return _para_data(edicao) < inicio_da_semana_esperada(hoje)
 
 
 def semanas_de_atraso(edicao: str | date, hoje: date) -> int:
     """Quantas edições semanais separam o que temos do que era esperado."""
-    return max((edicao_esperada(hoje) - _para_data(edicao)).days, 0) // 7
+    distancia = inicio_da_semana_esperada(hoje) - _segunda_da_semana(_para_data(edicao))
+    return max(distancia.days, 0) // 7

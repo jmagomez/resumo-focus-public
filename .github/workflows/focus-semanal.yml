@@ -18,6 +18,17 @@ on:
   schedule:
     - cron: "15 12 * * 1-3"   # 09h15 BRT, segunda a quarta
   workflow_dispatch:
+    inputs:
+      # Os outros dois elos da cadeia já tinham este input; a coleta não. Sem
+      # ele, disparar este workflow à mão fora de segunda/terça/quarta de
+      # execução não fazia nada — o passo de feriado pulava tudo, e o runbook
+      # do CLAUDE.md ("dispare focus-semanal manualmente") era letra morta.
+      ignorar_feriado:
+        description: >-
+          Ignorar verificacao de feriado e forcar a coleta e o dashboard.
+          Use para re-execucoes manuais de recuperacao.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -43,7 +54,10 @@ jobs:
       - name: Verificar se hoje é dia de rodar a rotina
         id: feriado
         run: |
-          if python -m focus feriado; then
+          if [ "${{ inputs.ignorar_feriado }}" = "true" ]; then
+            echo "deve_executar=true" >> "$GITHUB_OUTPUT"
+            echo "[ok] ignorar_feriado=true -- coleta forcada via workflow_dispatch."
+          elif python -m focus feriado; then
             echo "deve_executar=true" >> "$GITHUB_OUTPUT"
           else
             echo "deve_executar=false" >> "$GITHUB_OUTPUT"
