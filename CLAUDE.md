@@ -26,6 +26,8 @@ são auxiliares.
 (seg–qua 09h15 BRT)
 focus-semanal.yml    baixa PDF, extrai .txt, sincroniza histórico, gera dashboard
         │
+        ├── workflow_run: completed ──► pages.yml   build + deploy → GitHub Pages
+        │
         └── workflow_run: completed
                 │
         focus-resumo.yml    chama Claude Code /gerar-resumo → escreve .md
@@ -33,10 +35,6 @@ focus-semanal.yml    baixa PDF, extrai .txt, sincroniza histórico, gera dashboa
                 └── workflow_run: completed
                         │
                 focus-enviar.yml    monta HTML, envia e-mail, commita HTML
-                        │
-                        └── workflow_run: completed (via push em docs/)
-                                │
-                        pages.yml   build + deploy → GitHub Pages
 ```
 
 **Trigger de cada workflow:**
@@ -91,6 +89,10 @@ O repositório versiona só o `.txt` extraído (~12 KB contra ~780 KB do PDF).
 - Nomes pela **sexta-feira de coleta**, nunca pela data de publicação:
   `focus_AAAA-MM-DD`. A edição `focus_2026-09-11` é a que o BCB divulgou na
   segunda-feira, 14/09.
+- **Exceção: sexta que é feriado.** O BCB data a edição pelo último dia útil
+  da semana. A semana de 20/11/2026 (Consciência Negra) gerou
+  `focus_2026-11-19` — quinta. Nenhum código pode supor "edição = sexta":
+  a unidade é a **semana** (seg–sex), e a edição é a última data dela.
 - Referência anual: `"2026"`. Referência mensal: `"2026-09"` (a API devolve
   `"09/2026"` e o cliente normaliza). Inflação 12 meses: `"infl12m"`.
 - Histórico em formato **longo**, chave única
@@ -165,7 +167,7 @@ Todos via `python -m focus <subcomando>`:
 | `dashboard` | Gera `docs/index.html` a partir do histórico | — |
 | `email [--dry-run]` | Monta e envia o HTML do e-mail | — |
 | `email --dry-run` | **Exibe os números sem gravar nenhum arquivo nem enviar** | — |
-| `verificar` | Checa se `data_html ≥ data_coletada`; falha se pipeline parado | 0 ok / 1 parado |
+| `verificar` | Coleta e histórico na semana esperada (`focus.calendario`) e `data_html ≥ data_coletada` | 0 ok / 1 parado |
 | `feriado` | Hoje é feriado nacional? Imprime o nome e retorna 1 se sim | 0 não-feriado / 1 feriado |
 
 **Detalhe crítico sobre `--dry-run`:** antes de outubro de 2026, o dry-run
@@ -229,9 +231,15 @@ feriados: os dois módulos resolvem problemas distintos.
   estritamente positiva. Em variável que cruza o zero (resultado primário,
   conta corrente), o denominador tende a zero e a razão explode.
   `analytics.RAZAO_MINIMA_PARA_CV` guarda isso.
+- **Comparação entre edições casa pela semana, nunca por "data − 7 dias".**
+  O histórico é diário; "há 1/4/13 semanas" é a última data da semana-alvo
+  (`analytics._edicao_da_semana`, mesmo critério de `amostrar_semanal`).
+  Mirar a data exata acertava só por coincidência quando a edição era sexta;
+  com a edição de quinta (19/11/2026) a revisão saiu contra o dia 12/11 em vez
+  da edição de 13/11 — 88 de 144 séries anuais erradas, 19 com sinal trocado.
 - Quando a edição da semana anterior não existir no histórico, use a mais
   próxima **e registre qual foi** (`Revisao.data_1_semana`,
-  `Revisao.comparacao_exata`).
+  `Revisao.comparacao_exata`, que mede distância em semanas, não em dias).
 - Cor no e-mail segue o **sentido econômico**, não a direção: queda do IPCA é
   verde; queda do PIB é vermelha. Ver `analytics.ALTA_E_DESFAVORAVEL`.
 - A seta acompanha a mediana de hoje, nunca a coluna da semana anterior.
@@ -279,13 +287,33 @@ Configure em **Settings → Secrets and variables → Actions**.
 ### Pipeline parado (focus-vigia dispara alerta)
 
 1. Cheque `python -m focus verificar` localmente para identificar onde parou.
-2. Se faltou `.txt`: dispare `focus-semanal` manualmente (`workflow_dispatch`).
+2. Se faltou `.txt` (ou o dashboard precisa ser regerado): dispare
+   `focus-semanal` com `ignorar_feriado: true`. Sem o input, fora do dia de
+   execução o workflow pula todos os passos e não faz nada.
 3. Se faltou `.md`: dispare `focus-resumo` com `ignorar_feriado: true`.
 4. Se faltou o envio: dispare `focus-enviar` com `ignorar_feriado: true`.
 
-**`ignorar_feriado: true`** está disponível como input `workflow_dispatch` em
-`focus-resumo.yml` e `focus-enviar.yml`. Use para recuperações em dias não
-designados (fins de semana, quintas, sextas, feriados).
+**`ignorar_feriado: true`** está disponível como input `workflow_dispatch` nos
+três elos: `focus-semanal.yml`, `focus-resumo.yml` e `focus-enviar.yml`. Use
+para recuperações em dias não designados (fins de semana, quintas, sextas,
+feriados).
+
+**Cuidado com e-mail duplicado.** Disparar `focus-semanal` encadeia
+`focus-resumo` e `focus-enviar` por `workflow_run`. Fora do dia de execução
+eles pulam sozinhos (o input não se propaga) — é o que permite regerar só o
+dashboard. Num dia de execução (segunda comum), os dois rodam e o e-mail sai
+de novo.
+
+### Sextas-feiras feriado à vista (vigiar o pipeline nessas semanas)
+
+| Sexta | Feriado | Edição esperada |
+|---|---|---|
+| 25/12/2026 | Natal | provavelmente 23 ou 24/12 (24/12 é ponto facultativo) |
+| 01/01/2027 | Confraternização | provavelmente 30 ou 31/12 (31/12 é ponto facultativo) |
+| 26/03/2027 | Sexta-feira da Paixão | provavelmente 25/03 |
+
+O vigia e as revisões já aceitam qualquer dia da semana; confira só se o
+downloader encontrou o PDF (ele recua até 8 dias).
 
 ### Semana sem boletim — reprocessar edição específica
 
@@ -406,3 +434,24 @@ ainda não havia propagado). Resultado: `Found 0 artifact(s)`, falha no deploy.
 `needs` cria uma barreira de sincronização: quando `deploy` inicia, `build`
 encerrou completamente e todos os artifacts estão totalmente indexados na API.
 Esta é a arquitetura recomendada pela documentação oficial do GitHub para Pages.
+
+### ADR-09 — A unidade é a semana, não a sexta (nov/2026)
+
+**Contexto:** a sexta 20/11/2026 foi feriado e o BCB datou a edição de 19/11.
+Dois pontos supunham "edição = sexta": (1) `calendario.esta_atrasado` cobrava
+a edição de 2026-11-20, e o vigia alarmou de 25/11 em diante (run #71) com tudo
+em dia; o selo do dashboard usa a mesma função e alarmaria se regerado nesses
+dias; (2) `analytics.revisoes` buscava "data − 7 dias" no histórico diário e
+comparou 19/11 com 12/11 em vez da edição de 13/11 — painel e e-mail de 23/11
+publicaram revisões erradas em 88 de 144 séries anuais (19 com sinal trocado).
+
+**Decisão:** sem modelar feriados (pontos facultativos como 24/12, 31/12 e
+Carnaval não estão em lei), toda lógica de edição trabalha com a **semana**:
+o vigia aceita qualquer edição datada na semana esperada; as comparações usam
+a última data da semana-alvo. `focus-semanal.yml` ganhou `ignorar_feriado`
+(o único elo que não tinha) para permitir regerar o dashboard fora do dia de
+execução.
+
+**Consequência:** detecção de coleta travada inalterada (o atraso real fica
+numa semana anterior). O HTML do e-mail de 19/11 em `output/focus/` ficou com
+os números antigos — é o registro do que foi enviado e não deve ser reescrito.
