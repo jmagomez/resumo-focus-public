@@ -167,6 +167,7 @@ Todos via `python -m focus <subcomando>`:
 | `dashboard` | Gera `docs/index.html` a partir do histórico | — |
 | `email [--dry-run]` | Monta e envia o HTML do e-mail | — |
 | `email --dry-run` | **Exibe os números sem gravar nenhum arquivo nem enviar** | — |
+| `email --errata` | Reenvia a edição com assunto `ERRATA — …` e aviso no topo, lendo `output/focus/errata_AAAA-MM-DD.md`; grava `errata_AAAA-MM-DD.html` sem tocar no HTML original | 1 se o texto da errata faltar |
 | `verificar` | Coleta e histórico na semana esperada (`focus.calendario`) e `data_html ≥ data_coletada` | 0 ok / 1 parado |
 | `feriado` | Hoje é feriado nacional? Imprime o nome e retorna 1 se sim | 0 não-feriado / 1 feriado |
 
@@ -303,6 +304,24 @@ feriados).
 eles pulam sozinhos (o input não se propaga) — é o que permite regerar só o
 dashboard. Num dia de execução (segunda comum), os dois rodam e o e-mail sai
 de novo.
+
+### Enviar uma errata
+
+Quando um boletim já enviado sai com número errado (o caso de 19/11/2026):
+
+1. Corrija o código e regere o dashboard (ver acima). O e-mail corrigido é
+   montado do histórico, então os números só saem certos depois da correção.
+2. Escreva `output/focus/errata_AAAA-MM-DD.md` no formato da prosa: um
+   parágrafo dizendo o que estava errado e o que estava certo, e uma lista
+   "X: valor correto, e não valor enviado". Todo número tem de bater com o
+   histórico.
+3. Dispare `focus-enviar` com `errata: true` (e `ignorar_feriado: true` fora
+   do dia de execução). O e-mail sai para a lista inteira e não tem volta:
+   **o texto passa pelo dono do projeto antes do disparo.**
+
+O HTML original (`focus_AAAA-MM-DD.html`) não é sobrescrito: é o registro do
+que foi enviado. A errata vai para `errata_AAAA-MM-DD.html`, nome que o vigia
+ignora de propósito.
 
 ### Sextas-feiras feriado à vista (vigiar o pipeline nessas semanas)
 
