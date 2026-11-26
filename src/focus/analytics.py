@@ -148,6 +148,35 @@ def _data_mais_proxima(datas: Sequence[str], alvo: date, tolerancia_dias: int = 
     return None if melhor is None else melhor[1]
 
 
+def _semana(dia: date) -> date:
+    """Segunda-feira da semana de ``dia`` — a chave de uma edição semanal."""
+    return dia - timedelta(days=dia.weekday())
+
+
+def _edicao_da_semana(datas: Sequence[str], alvo: date) -> str | None:
+    """A edição publicada na semana de ``alvo``: a última data dessa semana.
+
+    O histórico é **diário** (a API entrega um ponto por dia útil), mas o Focus
+    é semanal e cada edição é o último dia útil da semana — a sexta, ou a
+    quinta quando a sexta é feriado. Mirar ``alvo`` e pegar a data mais
+    próxima, como antes, funcionava por coincidência: 7 dias antes de uma
+    sexta é outra sexta. Antes de uma edição de quinta, é outra **quinta** — um
+    dia útil qualquer, não a edição. Foi o que aconteceu com a edição de
+    19/11/2026 (sexta 20/11 foi feriado): a semana anterior saiu contra o dia
+    12/11, não contra a edição de 13/11, e 88 das 144 revisões anuais foram
+    publicadas diferentes das do boletim — 19 com o sinal trocado.
+
+    Mesmo critério de `amostrar_semanal`, que já desenhava o último ponto de
+    cada semana. Semana sem dado nenhum (histórico só de PDF, edição faltante)
+    cai para a data mais próxima, com a tolerância de sempre.
+    """
+    inicio = _semana(alvo)
+    na_semana = [texto for texto in datas if _semana(_para_data(texto)) == inicio]
+    if na_semana:
+        return max(na_semana)
+    return _data_mais_proxima(datas, alvo)
+
+
 # ── Revisões ───────────────────────────────────────────────────────────────
 
 
@@ -178,10 +207,16 @@ class Revisao:
 
     @property
     def comparacao_exata(self) -> bool:
-        """Falso quando a edição usada como "semana anterior" não é de 7 dias."""
+        """Falso quando a edição usada como "semana anterior" não é a da semana
+        imediatamente anterior.
+
+        Medido em semanas, não em dias: 19/11 contra 13/11 são 6 dias e é a
+        edição anterior legítima (a sexta 20/11 foi feriado). Exigir 7 dias
+        exatos marcava essa comparação como aproximada no painel.
+        """
         if not self.data or not self.data_1_semana:
             return False
-        dias = abs((_para_data(self.data) - _para_data(self.data_1_semana)).days)
+        dias = (_semana(_para_data(self.data)) - _semana(_para_data(self.data_1_semana))).days
         return dias == 7
 
     def _delta(self, anterior: float | None) -> float | None:
@@ -233,7 +268,7 @@ def revisoes(
 
         def anterior(semanas: int, _datas=datas, _serie=serie) -> tuple[float | None, str | None]:
             alvo = referencia - timedelta(weeks=semanas)
-            achada = _data_mais_proxima(_datas, alvo)
+            achada = _edicao_da_semana(_datas, alvo)
             if achada is None:
                 return None, None
             return _serie[achada].mediana, achada
@@ -657,7 +692,7 @@ def dispersao(
     # Desvio-padrão de quatro semanas atrás, pela mesma regra de casamento de
     # data que as revisões usam: alvo no calendário, tolerância para feriado.
     datas = sorted({o.data for o in no_horizonte})
-    referencia_4s = _data_mais_proxima(datas, _para_data(data) - timedelta(weeks=4))
+    referencia_4s = _edicao_da_semana(datas, _para_data(data) - timedelta(weeks=4))
     antes = {
         (o.indicador, o.referencia): o.desvio_padrao
         for o in no_horizonte
