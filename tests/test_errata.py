@@ -15,8 +15,7 @@ from focus.cli import main
 
 PROSA = "A mediana do IPCA para 2026 recuou para 4,90%.\n\n- IPCA (2026): 5,01 → 4,90.\n"
 ERRATA = (
-    "O quadro-resumo enviado comparou com a edição errada.\n\n"
-    "- IPCA (2026): -0,11, e não -0,10.\n"
+    "O quadro-resumo enviado comparou com a edição errada.\n\n- IPCA (2026): -0,11, e não -0,10.\n"
 )
 
 
