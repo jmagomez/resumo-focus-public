@@ -30,6 +30,13 @@ on:
           Use para re-execucoes manuais de recuperacao.
         type: boolean
         default: false
+      errata:
+        description: >-
+          Reenviar a edicao como ERRATA (assunto e aviso no topo). Exige
+          output/focus/errata_AAAA-MM-DD.md com o texto da correcao. Fora do
+          dia de execucao, marque tambem ignorar_feriado.
+        type: boolean
+        default: false
 
 
 permissions:
@@ -72,9 +79,13 @@ jobs:
           FOCUS_SMTP_APP_PASSWORD: ${{ secrets.FOCUS_SMTP_APP_PASSWORD }}
           FOCUS_EMAIL_DEST:        ${{ secrets.FOCUS_EMAIL_DEST }}
           FOCUS_EMAIL_BCC:         ${{ secrets.FOCUS_EMAIL_BCC }}
+          ERRATA:                  ${{ inputs.errata }}
         run: |
+          extra=()
+          if [ "$ERRATA" = "true" ]; then extra+=(--errata); fi
           python -m focus email \
-            --url-dashboard "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            --url-dashboard "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
+            "${extra[@]}"
 
       - name: Commitar o HTML enviado
         if: steps.feriado.outputs.deve_executar == 'true'
@@ -82,5 +93,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add output/focus/
-          git diff --staged --quiet || git commit -m "chore: HTML do resumo enviado"
+          git diff --staged --quiet || git commit -m "chore: HTML do resumo enviado${{ inputs.errata && ' (errata)' || '' }}"
           git push

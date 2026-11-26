@@ -240,10 +240,27 @@ def cmd_email(args: argparse.Namespace) -> int:
             "que o agente usa para escrevê-la."
         )
 
+    # --errata: reenvia a edição com um aviso de correção no topo.
+    #
+    # Existe por causa do e-mail de 19/11/2026: o quadro-resumo saiu com 16 de
+    # 24 variações comparadas com o dia errado (sexta-feira feriado). Reenviar
+    # o boletim igual, com o mesmo assunto, não serve — o leitor não sabe que é
+    # uma correção nem o que mudou. O texto da correção é escrito à parte, em
+    # `errata_{data}.md`, no mesmo formato da prosa (parágrafo + lista).
+    errata: report.Prosa | None = None
+    if args.errata:
+        caminho_errata = PASTA_SAIDA / f"errata_{data}.md"
+        errata = report.carregar_prosa(caminho_errata) if caminho_errata.exists() else None
+        if errata is None or not errata.resumo:
+            _erro(f"ERRO: --errata exige o texto da correção em {caminho_errata}.")
+            return 1
+
     revs = an.revisoes(observacoes, data=data)
-    html = report.construir(revs, prosa, data=data, url_dashboard=args.url_dashboard)
+    html = report.construir(revs, prosa, data=data, url_dashboard=args.url_dashboard, errata=errata)
     texto = report.texto_alternativo(html)
     assunto = f"Boletim Focus — {data}"
+    if errata is not None:
+        assunto = f"ERRATA — {assunto}"
 
     # --dry-run: mostra os números sem gravar HTML nem enviar e-mail.
     #
@@ -257,7 +274,12 @@ def cmd_email(args: argparse.Namespace) -> int:
         print(texto[:1200])
         return 0
 
-    destino_html = PASTA_SAIDA / f"focus_{data}.html"
+    # A errata grava em arquivo próprio: o `focus_{data}.html` é o registro do
+    # que foi enviado na primeira vez e não pode ser sobrescrito. O nome também
+    # não começa com `focus_`, para o vigia (que procura `focus_*.html`) não
+    # confundir a errata com uma edição nova.
+    nome_html = f"errata_{data}.html" if errata is not None else f"focus_{data}.html"
+    destino_html = PASTA_SAIDA / nome_html
     destino_html.parent.mkdir(parents=True, exist_ok=True)
     destino_html.write_text(html, encoding="utf-8")
     print(f"HTML gravado: {destino_html}")
@@ -473,6 +495,11 @@ def _parser() -> argparse.ArgumentParser:
     m.add_argument("--dest", default=None, help="destinatários (padrão: FOCUS_EMAIL_DEST)")
     m.add_argument("--url-dashboard", default=None)
     m.add_argument("--dry-run", action="store_true", help="monta sem enviar")
+    m.add_argument(
+        "--errata",
+        action="store_true",
+        help="reenvia a edição como errata, com o texto de output/focus/errata_AAAA-MM-DD.md",
+    )
     m.set_defaults(func=cmd_email)
 
     v = sub.add_parser("verificar", help="diagnóstico de saúde do pipeline")
